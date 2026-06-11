@@ -24,7 +24,7 @@ static uint32_t duty_percent_to_raw(float percent, uint32_t max_raw) {
 }
 
 esp_err_t f_ledc_init(f_ledc_handle_t *handle, uint32_t freq_hz,
-                      ledc_timer_bit_t duty_resolution) {
+                      int duty_resolution_bits) {
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
 
     f_ledc_handle_t h = calloc(1, sizeof(struct f_ledc));
@@ -33,8 +33,8 @@ esp_err_t f_ledc_init(f_ledc_handle_t *handle, uint32_t freq_hz,
     h->speed_mode = LEDC_LOW_SPEED_MODE;
     h->timer_num = LEDC_TIMER_0;
     h->freq_hz = freq_hz;
-    h->duty_resolution = duty_resolution;
-    h->max_duty_raw = (1UL << duty_resolution) - 1;
+    h->duty_resolution = (ledc_timer_bit_t)duty_resolution_bits;
+    h->max_duty_raw = (1UL << duty_resolution_bits) - 1;
 
     ledc_timer_config_t timer_cfg = {
         .speed_mode = h->speed_mode,
@@ -46,7 +46,7 @@ esp_err_t f_ledc_init(f_ledc_handle_t *handle, uint32_t freq_hz,
     ESP_ERROR_CHECK(ledc_timer_config(&timer_cfg));
 
     ESP_LOGI(TAG, "PWM init: %lu Hz, %d-bit (%lu steps)",
-             freq_hz, (int)duty_resolution, h->max_duty_raw);
+             freq_hz, duty_resolution_bits, h->max_duty_raw);
     *handle = h;
     return ESP_OK;
 }
