@@ -51,7 +51,7 @@ static esp_err_t send_error(httpd_req_t *req, const char *message, int http_code
     return send_json(req, root, status_str);
 }
 
-static int get_path_param(const char *uri, const char *base, uint8_t *id_out)
+int get_path_param(const char *uri, const char *base, uint8_t *id_out)
 {
     int base_len = strlen(base);
     if (strncmp(uri, base, base_len) != 0) return -1;
@@ -77,7 +77,7 @@ static bool read_body(httpd_req_t *req, char *buf, size_t buf_size)
     return true;
 }
 
-static const char *get_content_type(const char *path)
+const char *get_content_type(const char *path)
 {
     const char *ext = strrchr(path, '.');
     if (ext == NULL) return "application/octet-stream";
@@ -142,7 +142,7 @@ static esp_err_t options_handler(httpd_req_t *req)
 /*  Fan Helpers                                                        */
 /* ================================================================== */
 
-static cJSON *fan_to_json(const f_fan_info_t *info)
+cJSON *fan_to_json(const f_fan_info_t *info)
 {
     cJSON *o = cJSON_CreateObject();
     cJSON_AddNumberToObject(o, "id", info->id);
@@ -300,7 +300,7 @@ static esp_err_t fan_delete_handler(httpd_req_t *req)
 /*  Source Endpoints                                                   */
 /* ================================================================== */
 
-static cJSON *source_to_json(const f_source_info_t *info)
+cJSON *source_to_json(const f_source_info_t *info)
 {
     cJSON *o = cJSON_CreateObject();
     cJSON_AddNumberToObject(o, "id", info->id);
@@ -412,7 +412,7 @@ static esp_err_t source_temp_handler(httpd_req_t *req)
 /*  Curve Endpoints                                                    */
 /* ================================================================== */
 
-static cJSON *curve_to_json(const f_curve_info_t *info)
+cJSON *curve_to_json(const f_curve_info_t *info)
 {
     cJSON *o = cJSON_CreateObject();
     cJSON_AddNumberToObject(o, "id", info->id);
@@ -578,7 +578,7 @@ static esp_err_t curve_delete_handler(httpd_req_t *req)
 /*  Schedule Endpoints                                                 */
 /* ================================================================== */
 
-static cJSON *schedule_to_json(const f_schedule_info_t *info)
+cJSON *schedule_to_json(const f_schedule_info_t *info)
 {
     cJSON *o = cJSON_CreateObject();
     cJSON_AddNumberToObject(o, "id", info->id);
