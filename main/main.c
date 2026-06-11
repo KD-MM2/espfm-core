@@ -6,6 +6,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "f_core.h"
+#include "f_wifi.h"
 
 static const char *TAG = "espfm";
 
