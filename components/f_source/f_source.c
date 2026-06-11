@@ -140,6 +140,15 @@ uint8_t f_source_get_count(f_source_handle_t handle) {
     return handle ? handle->count : 0;
 }
 
+esp_err_t f_source_get_info(f_source_handle_t handle, uint8_t id,
+                             f_source_info_t *info_out) {
+    if (handle == NULL || id >= F_SOURCE_MAX_COUNT || info_out == NULL)
+        return ESP_ERR_INVALID_ARG;
+    if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
+    memcpy(info_out, &handle->sources[id], sizeof(f_source_info_t));
+    return ESP_OK;
+}
+
 esp_err_t f_source_for_each(f_source_handle_t handle,
                              void (*cb)(const f_source_info_t *, void *), void *ctx) {
     if (handle == NULL || cb == NULL) return ESP_ERR_INVALID_ARG;

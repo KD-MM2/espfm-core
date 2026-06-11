@@ -1,0 +1,6 @@
+idf_component_register(
+    SRCS f_http.c
+    INCLUDE_DIRS include
+    REQUIRES f_core f_fan f_source f_curve f_schedule esp_http_server
+    PRIV_REQUIRES espressif__cjson
+)
