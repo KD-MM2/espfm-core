@@ -1,4 +1,14 @@
 dependencies:
+  espressif/cjson:
+    component_hash: e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.7.19~2
   espressif/ds18b20:
     component_hash: 38022d0c39c08b1df3e77f95a3f9544251549a1fd9b6263357bf714026f4bb6b
     dependencies:
@@ -31,9 +41,10 @@ dependencies:
       type: idf
     version: 6.0.1
 direct_dependencies:
+- espressif/cjson
 - espressif/ds18b20
 - espressif/onewire_bus
 - idf
-manifest_hash: 8297e32b594d8ee2e9e1dc276bcbd1327e5fdae096f97106a0511dbf576e9be5
+manifest_hash: c33c179cd5cd0aa5239a9b7a929149cb47c9417ebb4aa75f3a3c0279ef5a7818
 target: esp32s3
 version: 3.0.0
