@@ -719,7 +719,7 @@ static esp_err_t static_file_handler(httpd_req_t *req)
     if (uri == NULL || strcmp(uri, "/") == 0) uri = "/index.html";
 
     char fpath[256];
-    strlcpy(fpath, "/spiffs", sizeof(fpath));
+    strlcpy(fpath, "/littlefs", sizeof(fpath));
     strlcat(fpath, uri, sizeof(fpath));
 
     struct stat st;

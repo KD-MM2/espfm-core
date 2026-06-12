@@ -17,3 +17,4 @@ dependencies:
   espressif/onewire_bus: '*'
   espressif/ds18b20: '*'
   espressif/cjson: '*'
+  joltwallet/littlefs: '*'

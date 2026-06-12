@@ -3,7 +3,6 @@
 #include "esp_err.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
-#include "esp_task_wdt.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "f_core.h"
@@ -25,22 +24,15 @@ void app_main(void) {
     /* --- Event Loop --- */
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    /* --- Task Watchdog --- */
-    const esp_task_wdt_config_t twdt_config = {
-        .timeout_ms = 5000,
-        .idle_core_mask = 0,
-        .trigger_panic = true,
-    };
-    ESP_ERROR_CHECK(esp_task_wdt_init(&twdt_config));
-    ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
-
+    /* --- Task Watchdog (ESP-IDF v6.0.1 auto-inits TWDT on ESP32-S3) --- */
+    ESP_LOGI(TAG, "TWDT: managed by ESP-IDF");
     ESP_LOGI(TAG, "ESPFanManager v%d.%d.%d starting...",
              ESPFM_VERSION_MAJOR, ESPFM_VERSION_MINOR, ESPFM_VERSION_PATCH);
     ESP_LOGI(TAG, "Chip: %s, IDF: %s", CONFIG_IDF_TARGET, IDF_VER);
 
-    /* --- SPIFFS Mount (for static file serving) --- */
+    /* --- LittleFS Mount (for config and static files) --- */
     f_config_handle_t config;
-    ESP_ERROR_CHECK(f_config_init(&config, "storage", "/spiffs"));
+    ESP_ERROR_CHECK(f_config_init(&config, "storage", "/littlefs"));
 
     /* --- WiFi Init --- */
     f_wifi_handle_t wifi;
@@ -54,8 +46,7 @@ void app_main(void) {
     ESP_LOGI(TAG, "Waiting for WiFi connection...");
     f_wifi_wait_connected(wifi, pdMS_TO_TICKS(30000));
 
-    /* --- Boot complete, unsubscribe main from TWDT --- */
-    ESP_ERROR_CHECK(esp_task_wdt_delete(NULL));
+    /* --- Boot complete --- */
     ESP_LOGI(TAG, "Boot complete, entering idle loop");
 
     while (1) {
