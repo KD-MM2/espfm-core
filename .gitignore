@@ -86,3 +86,7 @@ docs/
 .vscode/
 docs/
 examples/
+_build.ps1
+build_output.txt
+_flash.ps1
+flash_output.txt

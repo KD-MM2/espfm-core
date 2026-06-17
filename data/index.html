@@ -149,23 +149,24 @@ function sigClass(rssi) { return rssi > -60 ? 'good' : rssi > -75 ? 'ok' : 'weak
 // --- WiFi ---
 async function checkMode() {
   try {
-    const d = await api('GET', '/system/info');
-    if (d.status === 'ok') {
+    const d = await api('GET', '/wifi/status');
+    if (d.status === 'ok' && d.data && d.data.sta_connected) {
       mode = 'sta';
       document.getElementById('wifi-dot').className = 'dot sta';
       document.getElementById('wifi-label').textContent = 'Connected';
-      document.getElementById('wifi-ip').textContent = location.hostname;
+      document.getElementById('wifi-ip').textContent = d.data.sta_ip || location.hostname;
       document.getElementById('tab-wifi').classList.remove('active');
       document.getElementById('tab-dash').classList.add('active');
       loadDashboard();
+      return;
     }
-  } catch (e) {
-    mode = 'ap';
-    document.getElementById('wifi-dot').className = 'dot ap';
-    document.getElementById('wifi-label').textContent = 'AP Mode';
-    document.getElementById('tab-wifi').classList.add('active');
-    document.getElementById('tab-dash').classList.remove('active');
-  }
+  } catch (e) {}
+  // STA not connected — show WiFi setup
+  mode = 'ap';
+  document.getElementById('wifi-dot').className = 'dot ap';
+  document.getElementById('wifi-label').textContent = 'AP Mode';
+  document.getElementById('tab-wifi').classList.add('active');
+  document.getElementById('tab-dash').classList.remove('active');
 }
 
 async function scanWiFi() {
@@ -304,7 +305,7 @@ function fmtBytes(b) { if(!b)return'—'; return b>1024?(b/1024).toFixed(0)+'KB'
 
 // --- Init ---
 checkMode();
-setInterval(async () => { if (mode === 'sta') { loadSystem(); loadFans(); loadSources(); } }, 5000);
+setInterval(checkMode, 5000);
 </script>
 </body>
 </html>

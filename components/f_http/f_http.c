@@ -4,6 +4,7 @@
 #include "esp_event.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
+#include "esp_netif.h"
 #include "cJSON.h"
 #include <string.h>
 #include <stdlib.h>
@@ -764,6 +765,30 @@ static esp_err_t wifi_connect_handler(httpd_req_t *req)
     return send_json(req, root, "200 OK");
 }
 
+static esp_err_t wifi_status_handler(httpd_req_t *req)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "status", "ok");
+    cJSON *data = cJSON_CreateObject();
+
+    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    bool sta_ok = false;
+    char sta_ip[16] = "";
+    if (sta) {
+        esp_netif_ip_info_t ip;
+        if (esp_netif_get_ip_info(sta, &ip) == ESP_OK && ip.ip.addr != 0) {
+            sta_ok = true;
+            snprintf(sta_ip, sizeof(sta_ip), IPSTR, IP2STR(&ip.ip));
+        }
+    }
+    cJSON_AddBoolToObject(data, "sta_connected", sta_ok);
+    cJSON_AddStringToObject(data, "sta_ip", sta_ip);
+    cJSON_AddStringToObject(data, "ap_ip", "192.168.4.1");
+
+    cJSON_AddItemToObject(root, "data", data);
+    return send_json(req, root, "200 OK");
+}
+
 /* ================================================================== */
 /*  System Info                                                        */
 /* ================================================================== */
@@ -950,6 +975,7 @@ esp_err_t f_http_start(f_http_handle_t handle, f_fan_handle_t fan,
     const httpd_uri_t wifi_uris[] = {
         { .uri = "/api/v1/wifi/scan",    .method = HTTP_GET,  .handler = wifi_scan_handler,    .user_ctx = handle },
         { .uri = "/api/v1/wifi/connect", .method = HTTP_POST, .handler = wifi_connect_handler, .user_ctx = handle },
+        { .uri = "/api/v1/wifi/status",  .method = HTTP_GET,  .handler = wifi_status_handler,  .user_ctx = handle },
     };
     for (int i = 0; i < sizeof(wifi_uris)/sizeof(wifi_uris[0]); i++)
         httpd_register_uri_handler(handle->server, &wifi_uris[i]);

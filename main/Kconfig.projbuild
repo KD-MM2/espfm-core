@@ -1,10 +1,10 @@
 menu "ESPFanManager Configuration"
     config ESPFM_WIFI_SSID
         string "WiFi SSID"
-        default "myssid"
+        default "TP-Link_E84F_2G"
     config ESPFM_WIFI_PASSWORD
         string "WiFi Password"
-        default "mypassword"
+        default "LE5!3#LS&J9Yji"
     config ESPFM_WIFI_MAX_RETRY
         int "Maximum WiFi retry attempts"
         default 5
