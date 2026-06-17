@@ -34,13 +34,13 @@ void app_main(void) {
     f_config_handle_t config;
     ESP_ERROR_CHECK(f_config_init(&config, "storage", "/littlefs"));
 
-    /* --- WiFi Init --- */
-    f_wifi_handle_t wifi;
-    ESP_ERROR_CHECK(f_wifi_init(&wifi));
-
-    /* --- HTTP Server Init (starts when WiFi connects) --- */
+    /* --- HTTP Server Init (register WiFi event handlers BEFORE WiFi starts) --- */
     f_http_handle_t http;
     ESP_ERROR_CHECK(f_http_init(&http));
+
+    /* --- WiFi Init (APSTA — AP starts immediately, fires CONNECTED event) --- */
+    f_wifi_handle_t wifi;
+    ESP_ERROR_CHECK(f_wifi_init(&wifi));
 
     /* --- Wait for WiFi --- */
     ESP_LOGI(TAG, "Waiting for WiFi connection...");
