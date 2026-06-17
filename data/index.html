@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ESPFanManager</title>
+<style>
+:root{--bg:#0f1117;--card:#1a1d27;--border:#2a2d3a;--text:#e0e0e0;--dim:#888;--accent:#4fc3f7;--green:#66bb6a;--red:#ef5350;--yellow:#ffa726;--fan:#42a5f5}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:14px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--text);padding:16px;max-width:800px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:16px}
+header h1{font-size:20px}
+.status{display:flex;align-items:center;gap:8px;font-size:13px}
+.status .dot{width:10px;height:10px;border-radius:50%}
+.status .dot.ap{background:var(--yellow)}
+.status .dot.sta{background:var(--green)}
+.status .dot.off{background:var(--red)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px}
+.card h2{font-size:15px;margin-bottom:10px;color:var(--accent)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input,select,button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:13px}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+button{cursor:pointer;background:var(--accent);color:#000;border:none;font-weight:600}
+button:hover{opacity:.85}
+button.danger{background:var(--red)}
+button.small{padding:4px 10px;font-size:12px}
+.slider{width:100%;accent-color:var(--fan)}
+.duty-val{font-weight:700;font-size:24px;min-width:50px;text-align:center}
+.wifi-list{max-height:300px;overflow-y:auto}
+.wifi-item{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer}
+.wifi-item:hover{background:rgba(79,195,247,.08)}
+.wifi-item .name{font-weight:600}
+.wifi-item .sig{padding:2px 8px;border-radius:4px;font-size:12px}
+.sig.good{background:#1b5e20;color:#66bb6a}
+.sig.ok{background:#4a3800;color:#ffa726}
+.sig.weak{background:#4a1a1a;color:#ef5350}
+.tabs{display:flex;gap:0;margin-bottom:12px}
+.tab{padding:8px 16px;background:var(--card);border:1px solid var(--border);cursor:pointer;font-size:13px;border-radius:6px 6px 0 0}
+.tab.active{background:var(--accent);color:#000;border-color:var(--accent)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.info-item{font-size:13px}
+.info-item span{color:var(--dim)}
+.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:20px;right:20px;padding:12px 20px;border-radius:8px;font-size:13px;animation:fade .3s}
+.toast.ok{background:#1b5e20;color:#66bb6a}
+.toast.err{background:#4a1a1a;color:#ef5350}
+@keyframes fade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚙ ESPFanManager</h1>
+  <div class="status">
+    <div class="dot off" id="wifi-dot"></div>
+    <span id="wifi-label">—</span>
+    <span id="wifi-ip" style="color:var(--dim)"></span>
+  </div>
+</header>
+
+<!-- WiFi Setup Tab (shown when AP-only) -->
+<div id="tab-wifi" class="tab-content active">
+  <div class="card">
+    <h2>📡 WiFi Setup</h2>
+    <p style="color:var(--dim);margin-bottom:12px;font-size:13px">
+      Device is in AP mode. Connect to a WiFi network for full functionality.
+    </p>
+    <div class="row" style="margin-bottom:8px">
+      <button onclick="scanWiFi()" id="scan-btn">🔍 Scan Networks</button>
+      <span id="scan-status" style="font-size:12px;color:var(--dim)"></span>
+    </div>
+    <div class="wifi-list" id="wifi-list"></div>
+  </div>
+  <div class="card" id="connect-card" style="display:none">
+    <h2>🔐 Connect</h2>
+    <input type="text" id="conn-ssid" placeholder="SSID" readonly style="margin-bottom:8px;width:100%">
+    <div class="row">
+      <input type="password" id="conn-pass" placeholder="Password" style="flex:1">
+      <button onclick="connectWiFi()">Connect</button>
+      <button class="danger small" onclick="document.getElementById('connect-card').style.display='none'">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- Dashboard Tab (shown when STA connected) -->
+<div id="tab-dash" class="tab-content">
+  <div class="card">
+    <h2>📊 System</h2>
+    <div class="info-grid" id="sys-info">
+      <div class="info-item"><span>Version</span> <span id="si-ver">—</span></div>
+      <div class="info-item"><span>Uptime</span> <span id="si-up">—</span></div>
+      <div class="info-item"><span>Heap Free</span> <span id="si-heap">—</span></div>
+      <div class="info-item"><span>IP</span> <span id="si-ip">—</span></div>
+      <div class="info-item"><span>Fans</span> <span id="si-fans">0</span></div>
+      <div class="info-item"><span>Sources</span> <span id="si-src">0</span></div>
+      <div class="info-item"><span>Curves</span> <span id="si-cur">0</span></div>
+      <div class="info-item"><span>Schedules</span> <span id="si-sched">0</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🌀 Fans</h2>
+    <div id="fan-list"></div>
+    <div class="row" style="margin-top:10px">
+      <input type="text" id="new-fan-name" placeholder="Fan name" style="width:120px">
+      <input type="number" id="new-fan-pwm" placeholder="PWM GPIO" style="width:90px" min="0" max="48">
+      <button onclick="createFan()">+ Add Fan</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🌡 Sources</h2>
+    <div id="source-list"></div>
+    <div class="row" style="margin-top:10px">
+      <input type="text" id="new-src-name" placeholder="Name" style="width:120px">
+      <select id="new-src-type">
+        <option value="manual">Manual</option><option value="ntc">NTC</option><option value="ds18b20">DS18B20</option>
+      </select>
+      <button onclick="createSource()">+ Add Source</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast" style="display:none"></div>
+
+<script>
+const API = window.location.origin + '/api/v1';
+let mode = 'ap'; // 'ap' | 'sta'
+
+// --- Helpers ---
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(API + path, opts);
+  return r.json();
+}
+function toast(msg, ok) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast ' + (ok ? 'ok' : 'err');
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3000);
+}
+function sigClass(rssi) { return rssi > -60 ? 'good' : rssi > -75 ? 'ok' : 'weak'; }
+
+// --- WiFi ---
+async function checkMode() {
+  try {
+    const d = await api('GET', '/system/info');
+    if (d.status === 'ok') {
+      mode = 'sta';
+      document.getElementById('wifi-dot').className = 'dot sta';
+      document.getElementById('wifi-label').textContent = 'Connected';
+      document.getElementById('wifi-ip').textContent = location.hostname;
+      document.getElementById('tab-wifi').classList.remove('active');
+      document.getElementById('tab-dash').classList.add('active');
+      loadDashboard();
+    }
+  } catch (e) {
+    mode = 'ap';
+    document.getElementById('wifi-dot').className = 'dot ap';
+    document.getElementById('wifi-label').textContent = 'AP Mode';
+    document.getElementById('tab-wifi').classList.add('active');
+    document.getElementById('tab-dash').classList.remove('active');
+  }
+}
+
+async function scanWiFi() {
+  const btn = document.getElementById('scan-btn');
+  const st = document.getElementById('scan-status');
+  btn.disabled = true; st.textContent = 'Scanning...';
+  try {
+    const d = await api('GET', '/wifi/scan');
+    const list = document.getElementById('wifi-list');
+    list.innerHTML = '';
+    if (!d.data || !d.data.length) { list.innerHTML = '<div style="padding:12px;color:var(--dim)">No networks found</div>'; return; }
+    d.data.sort((a,b) => b.rssi - a.rssi);
+    d.data.forEach(ap => {
+      const div = document.createElement('div');
+      div.className = 'wifi-item';
+      div.innerHTML = `<span class="name">${esc(ap.ssid)}</span>
+        <span class="sig ${sigClass(ap.rssi)}">${ap.rssi} dBm</span>`;
+      div.onclick = () => {
+        document.getElementById('conn-ssid').value = ap.ssid;
+        document.getElementById('conn-pass').value = '';
+        document.getElementById('connect-card').style.display = 'block';
+      };
+      list.appendChild(div);
+    });
+    st.textContent = `Found ${d.data.length} networks`;
+  } catch(e) { st.textContent = 'Scan failed'; }
+  btn.disabled = false;
+}
+
+async function connectWiFi() {
+  const ssid = document.getElementById('conn-ssid').value;
+  const pass = document.getElementById('conn-pass').value;
+  if (!ssid) return;
+  try {
+    const d = await api('POST', '/wifi/connect', { ssid, password: pass });
+    if (d.status === 'ok') {
+      toast('Connecting to ' + ssid + '...', true);
+      document.getElementById('connect-card').style.display = 'none';
+      setTimeout(checkMode, 5000);
+    } else {
+      toast('Failed: ' + (d.error?.message || 'unknown'), false);
+    }
+  } catch(e) { toast('Connection error', false); }
+}
+
+// --- Dashboard ---
+async function loadDashboard() {
+  await Promise.all([loadSystem(), loadFans(), loadSources()]);
+}
+async function loadSystem() {
+  try {
+    const d = await api('GET', '/system/info');
+    if (d.status !== 'ok') return;
+    const s = d.data;
+    document.getElementById('si-ver').textContent = s.version || '—';
+    document.getElementById('si-up').textContent = fmtUptime(s.uptime_s);
+    document.getElementById('si-heap').textContent = fmtBytes(s.heap_free);
+    document.getElementById('si-ip').textContent = location.hostname;
+    document.getElementById('si-fans').textContent = s.fan_count || 0;
+    document.getElementById('si-src').textContent = s.source_count || 0;
+    document.getElementById('si-cur').textContent = s.curve_count || 0;
+    document.getElementById('si-sched').textContent = s.schedule_count || 0;
+  } catch(e) {}
+}
+async function loadFans() {
+  try {
+    const d = await api('GET', '/fans');
+    const list = document.getElementById('fan-list');
+    if (!d.data || !d.data.length) { list.innerHTML = '<div style="color:var(--dim)">No fans configured</div>'; return; }
+    list.innerHTML = d.data.map(f => `
+      <div class="card" style="margin-bottom:8px">
+        <div class="row" style="justify-content:space-between">
+          <strong>${esc(f.name)}</strong>
+          <button class="danger small" onclick="deleteFan(${f.id})">✕</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <input type="range" class="slider" min="0" max="100" value="${f.duty}"
+            oninput="setDuty(${f.id},this.value);this.nextElementSibling.textContent=this.value+'%'">
+          <span class="duty-val">${f.duty}%</span>
+        </div>
+        <div class="row" style="margin-top:4px;font-size:12px;color:var(--dim)">
+          <span>RPM: ${f.rpm || '—'}</span>
+          <span>Mode: ${['Manual','Auto'][f.mode]||'?'}</span>
+          <span>Inv: ${f.inverted?'Yes':'No'}</span>
+          <span>GPIO: ${f.pwm_gpio}</span>
+        </div>
+      </div>`).join('');
+  } catch(e) {}
+}
+async function createFan() {
+  const name = document.getElementById('new-fan-name').value;
+  const pwm = parseInt(document.getElementById('new-fan-pwm').value) || 5;
+  if (!name) return toast('Name required', false);
+  try {
+    const d = await api('PUT', '/fans', { name, pwm_gpio: pwm, tach_gpio: 255 });
+    if (d.status === 'ok') { toast('Fan created', true); loadFans(); loadSystem(); }
+    else toast('Failed: ' + (d.error?.message||''), false);
+  } catch(e) { toast('Error', false); }
+}
+async function setDuty(id, duty) {
+  await api('PUT', '/fans/' + id, { mode: 0, duty: parseInt(duty) });
+}
+async function deleteFan(id) {
+  if (!confirm('Delete fan ' + id + '?')) return;
+  await api('DELETE', '/fans/' + id);
+  loadFans(); loadSystem();
+}
+
+async function loadSources() {
+  try {
+    const d = await api('GET', '/sources');
+    const list = document.getElementById('source-list');
+    if (!d.data || !d.data.length) { list.innerHTML = '<div style="color:var(--dim)">No sources configured</div>'; return; }
+    list.innerHTML = d.data.map(s => `
+      <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+        <span>${esc(s.name||'?')} <span style="color:var(--dim)">${s.type||'?'}</span></span>
+        <span>${s.temp_c != null ? s.temp_c.toFixed(1)+'°C' : '—'} <span style="color:var(--dim)">${s.status||'?'}</span></span>
+      </div>`).join('');
+  } catch(e) {}
+}
+async function createSource() {
+  const name = document.getElementById('new-src-name').value;
+  const type = document.getElementById('new-src-type').value;
+  if (!name) return toast('Name required', false);
+  try {
+    const d = await api('PUT', '/sources', { name, type });
+    if (d.status === 'ok') { toast('Source created', true); loadSources(); loadSystem(); }
+    else toast('Failed: ' + (d.error?.message||''), false);
+  } catch(e) { toast('Error', false); }
+}
+
+// --- Utils ---
+function esc(s) { const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
+function fmtUptime(s) { if(!s)return'—'; const m=Math.floor(s/60),h=Math.floor(m/60); return h+'h '+(m%60)+'m'; }
+function fmtBytes(b) { if(!b)return'—'; return b>1024?(b/1024).toFixed(0)+'KB':b+'B'; }
+
+// --- Init ---
+checkMode();
+setInterval(async () => { if (mode === 'sta') { loadSystem(); loadFans(); loadSources(); } }, 5000);
+</script>
+</body>
+</html>

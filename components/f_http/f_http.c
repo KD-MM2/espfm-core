@@ -3,6 +3,7 @@
 #include "esp_http_server.h"
 #include "esp_event.h"
 #include "esp_timer.h"
+#include "esp_wifi.h"
 #include "cJSON.h"
 #include <string.h>
 #include <stdlib.h>
@@ -672,6 +673,98 @@ static esp_err_t schedule_delete_handler(httpd_req_t *req)
 }
 
 /* ================================================================== */
+/*  WiFi Scan & Connect                                                */
+/* ================================================================== */
+
+static esp_err_t wifi_scan_handler(httpd_req_t *req)
+{
+    f_http_handle_t h = (f_http_handle_t)req->user_ctx;
+
+    wifi_scan_config_t scan_cfg = {
+        .ssid = NULL,
+        .bssid = NULL,
+        .channel = 0,
+        .show_hidden = false,
+        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+        .scan_time.active.min = 100,
+        .scan_time.active.max = 300,
+    };
+
+    esp_err_t err = esp_wifi_scan_start(&scan_cfg, true);
+    if (err != ESP_OK) {
+        return send_error(req, "scan failed", 500);
+    }
+
+    uint16_t ap_count = 0;
+    esp_wifi_scan_get_ap_num(&ap_count);
+    if (ap_count == 0) {
+        cJSON *root = cJSON_CreateObject();
+        cJSON_AddStringToObject(root, "status", "ok");
+        cJSON_AddItemToObject(root, "data", cJSON_CreateArray());
+        return send_json(req, root, "200 OK");
+    }
+
+    wifi_ap_record_t *ap_records = calloc(ap_count, sizeof(wifi_ap_record_t));
+    if (ap_records == NULL) return send_error(req, "oom", 500);
+    esp_wifi_scan_get_ap_records(&ap_count, ap_records);
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "status", "ok");
+    cJSON *arr = cJSON_AddArrayToObject(root, "data");
+
+    for (int i = 0; i < ap_count; i++) {
+        cJSON *o = cJSON_CreateObject();
+        cJSON_AddStringToObject(o, "ssid", (const char *)ap_records[i].ssid);
+        cJSON_AddNumberToObject(o, "rssi", ap_records[i].rssi);
+        cJSON_AddNumberToObject(o, "channel", ap_records[i].primary);
+        cJSON_AddNumberToObject(o, "authmode", ap_records[i].authmode);
+        cJSON_AddItemToArray(arr, o);
+    }
+
+    free(ap_records);
+    return send_json(req, root, "200 OK");
+}
+
+static esp_err_t wifi_connect_handler(httpd_req_t *req)
+{
+    char body[256];
+    if (!read_body(req, body, sizeof(body)))
+        return send_error(req, "empty body", 400);
+
+    cJSON *json = cJSON_Parse(body);
+    if (json == NULL) return send_error(req, "invalid JSON", 400);
+
+    cJSON *ssid_node = cJSON_GetObjectItem(json, "ssid");
+    cJSON *pass_node = cJSON_GetObjectItem(json, "password");
+    if (!cJSON_IsString(ssid_node) || !cJSON_IsString(pass_node)) {
+        cJSON_Delete(json);
+        return send_error(req, "ssid and password required", 400);
+    }
+
+    wifi_config_t sta_config = { 0 };
+    strncpy((char *)sta_config.sta.ssid, ssid_node->valuestring,
+            sizeof(sta_config.sta.ssid) - 1);
+    strncpy((char *)sta_config.sta.password, pass_node->valuestring,
+            sizeof(sta_config.sta.password) - 1);
+    sta_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+
+    esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &sta_config);
+    cJSON_Delete(json);
+    if (err != ESP_OK) {
+        return send_error(req, "config failed", 500);
+    }
+
+    /* Disconnect and reconnect with new credentials */
+    esp_wifi_disconnect();
+    esp_wifi_connect();
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "status", "ok");
+    cJSON_AddStringToObject(root, "data", "connecting");
+    return send_json(req, root, "200 OK");
+}
+
+/* ================================================================== */
 /*  System Info                                                        */
 /* ================================================================== */
 
@@ -852,6 +945,14 @@ esp_err_t f_http_start(f_http_handle_t handle, f_fan_handle_t fan,
     };
     for (int i = 0; i < sizeof(sched_uris)/sizeof(sched_uris[0]); i++)
         httpd_register_uri_handler(handle->server, &sched_uris[i]);
+
+    /* WiFi */
+    const httpd_uri_t wifi_uris[] = {
+        { .uri = "/api/v1/wifi/scan",    .method = HTTP_GET,  .handler = wifi_scan_handler,    .user_ctx = handle },
+        { .uri = "/api/v1/wifi/connect", .method = HTTP_POST, .handler = wifi_connect_handler, .user_ctx = handle },
+    };
+    for (int i = 0; i < sizeof(wifi_uris)/sizeof(wifi_uris[0]); i++)
+        httpd_register_uri_handler(handle->server, &wifi_uris[i]);
 
     /* System info */
     const httpd_uri_t sys_uri = {
