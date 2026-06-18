@@ -109,7 +109,7 @@ static int coap_parse(const uint8_t *buf, size_t len, coap_req_t *req) {
     memset(&req->path,0,sizeof(req->path));
 
     size_t pos=4;
-    if(req->tkl>0 && pos+req->tkl<=len) {
+    if(req->tkl>0 && req->tkl<=sizeof(req->token) && pos+req->tkl<=len) {
         memcpy(req->token,buf+pos,req->tkl);
         pos+=req->tkl;
     }
