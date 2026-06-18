@@ -1,4 +1,5 @@
 #include "f_http.h"
+#include "f_constraints.h"
 #include "esp_log.h"
 #include "esp_http_server.h"
 #include "esp_event.h"
@@ -12,6 +13,13 @@
 #include <sys/stat.h>
 
 static const char *TAG = "f_http";
+
+/* Validation helper — evaluate constraint, return 400 with message on failure */
+#define CHECK(expr, req) do {               \
+    const char *_v = NULL;                  \
+    if ((expr) != ESP_OK)                   \
+        return send_error((req), _v, 400);  \
+} while(0)
 
 /* ------------------------------------------------------------------ */
 /*  Internal helpers                                                   */
@@ -70,13 +78,15 @@ int get_path_param(const char *uri, const char *base, uint8_t *id_out)
 static bool read_body(httpd_req_t *req, char *buf, size_t buf_size)
 {
     int total = 0;
-    while (total < (int)(buf_size - 1)) {
-        int r = httpd_req_recv(req, buf + total, buf_size - 1 - total);
-        if (r <= 0) { buf[total] = '\0'; return (total > 0); }
+    int remaining = req->content_len;
+    while (remaining > 0 && total < (int)(buf_size - 1)) {
+        int r = httpd_req_recv(req, buf + total, remaining);
+        if (r <= 0) break;
         total += r;
+        remaining -= r;
     }
-    buf[buf_size - 1] = '\0';
-    return true;
+    buf[total] = '\0';
+    return (total > 0);
 }
 
 const char *get_content_type(const char *path)
@@ -106,6 +116,7 @@ struct f_http {
     f_source_handle_t   source;
     f_curve_handle_t    curve;
     f_schedule_handle_t schedule;
+    f_config_handle_t   config;
 };
 
 /* ------------------------------------------------------------------ */
@@ -117,7 +128,7 @@ static void _on_wifi_connected(void *arg, esp_event_base_t base,
 {
     f_http_handle_t h = (f_http_handle_t)arg;
     if (h == NULL) return;
-    f_http_start(h, h->fan, h->source, h->curve, h->schedule);
+    f_http_start(h);
 }
 
 static void _on_wifi_disconnected(void *arg, esp_event_base_t base,
@@ -159,6 +170,7 @@ cJSON *fan_to_json(const f_fan_info_t *info)
     cJSON_AddNumberToObject(o, "source_id", info->source_id);
     cJSON_AddNumberToObject(o, "curve_id", info->curve_id);
     cJSON_AddNumberToObject(o, "schedule_id", info->schedule_id);
+    cJSON_AddNumberToObject(o, "group_id", info->group_id);
     const char *alarm_str = "none";
     if (info->alarm == FAN_ALARM_STALL)   alarm_str = "stall";
     if (info->alarm == FAN_ALARM_OVERTEMP) alarm_str = "overtemp";
@@ -224,15 +236,25 @@ static esp_err_t fan_create_handler(httpd_req_t *req)
         return send_error(req, "pwm_gpio and name required", 400);
     }
 
-    uint8_t gpio = (uint8_t)pwm_node->valueint;
+    int gpio_val = pwm_node->valueint;
+    CHECK(f_constraints_gpio(gpio_val, &_v), req);
+    CHECK(f_constraints_name(name_node->valuestring, &_v), req);
+    CHECK(f_constraints_fan_count(f_fan_get_count(h->fan), &_v), req);
+
+    uint8_t gpio = (uint8_t)gpio_val;
     uint8_t tach = F_FAN_TACH_NONE;
     cJSON *tach_node = cJSON_GetObjectItem(json, "tach_gpio");
-    if (cJSON_IsNumber(tach_node)) tach = (uint8_t)tach_node->valueint;
+    if (cJSON_IsNumber(tach_node)) {
+        CHECK(f_constraints_gpio(tach_node->valueint, &_v), req);
+        tach = (uint8_t)tach_node->valueint;
+    }
 
     uint8_t new_id;
     esp_err_t err = f_fan_add(h->fan, gpio, tach, name_node->valuestring, &new_id);
     cJSON_Delete(json);
     if (err != ESP_OK) return send_error(req, "failed to create fan", 500);
+
+    if (h->config) f_config_save_all(h->config, h->fan, h->source, h->curve, h->schedule);
 
     f_fan_info_t info;
     f_fan_get_info(h->fan, new_id, &info);
@@ -264,14 +286,68 @@ static esp_err_t fan_update_handler(httpd_req_t *req)
     if (json == NULL) return send_error(req, "invalid JSON", 400);
 
     cJSON *mode_node = cJSON_GetObjectItem(json, "mode");
-    if (cJSON_IsNumber(mode_node))
+    if (cJSON_IsNumber(mode_node)) {
+        CHECK(f_constraints_mode(mode_node->valueint, &_v), req);
         f_fan_set_mode(h->fan, id, (fan_mode_t)mode_node->valueint);
+    }
 
     cJSON *duty_node = cJSON_GetObjectItem(json, "duty");
-    if (cJSON_IsNumber(duty_node))
+    if (cJSON_IsNumber(duty_node)) {
+        CHECK(f_constraints_duty(duty_node->valueint, &_v), req);
         f_fan_set_duty(h->fan, id, (uint8_t)duty_node->valueint);
+    }
+
+    cJSON *source_node = cJSON_GetObjectItem(json, "source_id");
+    if (cJSON_IsNumber(source_node)) {
+        uint8_t sid = (uint8_t)source_node->valueint;
+        if (sid != 0xFF) {
+            f_source_info_t si;
+            if (f_source_get_info(h->source, sid, &si) != ESP_OK) {
+                cJSON_Delete(json);
+                return send_error(req, "source_id not found", 400);
+            }
+        }
+        f_fan_set_source(h->fan, id, sid);
+    }
+
+    cJSON *curve_node = cJSON_GetObjectItem(json, "curve_id");
+    if (cJSON_IsNumber(curve_node)) {
+        uint8_t cid = (uint8_t)curve_node->valueint;
+        if (cid != 0xFF) {
+            f_curve_info_t ci;
+            if (f_curve_get_info(h->curve, cid, &ci) != ESP_OK) {
+                cJSON_Delete(json);
+                return send_error(req, "curve_id not found", 400);
+            }
+        }
+        f_fan_set_curve(h->fan, id, cid);
+    }
+
+    cJSON *sched_node = cJSON_GetObjectItem(json, "schedule_id");
+    if (cJSON_IsNumber(sched_node)) {
+        uint8_t scid = (uint8_t)sched_node->valueint;
+        if (scid != 0xFF) {
+            f_schedule_info_t si;
+            if (f_schedule_get_info(h->schedule, scid, &si) != ESP_OK) {
+                cJSON_Delete(json);
+                return send_error(req, "schedule_id not found", 400);
+            }
+        }
+        f_fan_set_schedule(h->fan, id, scid);
+    }
+
+    cJSON *inv_node = cJSON_GetObjectItem(json, "inverted");
+    if (cJSON_IsBool(inv_node))
+        f_fan_set_inverted(h->fan, id, cJSON_IsTrue(inv_node));
+
+    cJSON *group_node = cJSON_GetObjectItem(json, "group_id");
+    if (cJSON_IsNumber(group_node))
+        f_fan_set_group(h->fan, id, (uint8_t)group_node->valueint);
 
     cJSON_Delete(json);
+
+    if (h->config) f_config_save_all(h->config, h->fan, h->source, h->curve, h->schedule);
+
     f_fan_get_info(h->fan, id, &info);
 
     cJSON *root = cJSON_CreateObject();
@@ -291,6 +367,8 @@ static esp_err_t fan_delete_handler(httpd_req_t *req)
 
     if (f_fan_remove(h->fan, id) != ESP_OK)
         return send_error(req, "fan not found", 404);
+
+    if (h->config) f_config_save_all(h->config, h->fan, h->source, h->curve, h->schedule);
 
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "status", "ok");
@@ -354,6 +432,9 @@ static esp_err_t source_create_handler(httpd_req_t *req)
         return send_error(req, "type and name required", 400);
     }
 
+    CHECK(f_constraints_name(name_node->valuestring, &_v), req);
+    CHECK(f_constraints_source_count(f_source_get_count(h->source), &_v), req);
+
     source_type_t type;
     const char *tstr = type_node->valuestring;
     if (!strcmp(tstr, "ntc")) type = SOURCE_TYPE_NTC;
@@ -363,13 +444,18 @@ static esp_err_t source_create_handler(httpd_req_t *req)
 
     uint8_t gpio = F_SOURCE_GPIO_NONE;
     cJSON *gpio_node = cJSON_GetObjectItem(json, "gpio");
-    if (cJSON_IsNumber(gpio_node)) gpio = (uint8_t)gpio_node->valueint;
+    if (cJSON_IsNumber(gpio_node)) {
+        CHECK(f_constraints_gpio(gpio_node->valueint, &_v), req);
+        gpio = (uint8_t)gpio_node->valueint;
+    }
 
     uint8_t new_id;
     esp_err_t err = f_source_add(h->source, type, gpio,
                                   name_node->valuestring, &new_id);
     cJSON_Delete(json);
     if (err != ESP_OK) return send_error(req, "failed to create source", 500);
+
+    if (h->config) f_config_save_all(h->config, h->fan, h->source, h->curve, h->schedule);
 
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "status", "ok");
@@ -398,11 +484,35 @@ static esp_err_t source_temp_handler(httpd_req_t *req)
         return send_error(req, "id and temp_c required", 400);
     }
 
+    CHECK(f_constraints_temp_c((float)temp_node->valuedouble, &_v), req);
+
     esp_err_t err = f_source_update_manual(h->source,
                        (uint8_t)id_node->valueint,
                        (float)temp_node->valuedouble);
     cJSON_Delete(json);
     if (err != ESP_OK) return send_error(req, "source not found or not manual", 400);
+
+    if (h->config) f_config_save_all(h->config, h->fan, h->source, h->curve, h->schedule);
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "status", "ok");
+    cJSON_AddNullToObject(root, "data");
+    return send_json(req, root, "200 OK");
+}
+
+static esp_err_t source_delete_handler(httpd_req_t *req)
+{
+    f_http_handle_t h = (f_http_handle_t)req->user_ctx;
+    if (h == NULL || h->source == NULL) return send_error(req, "not ready", 503);
+
+    uint8_t id;
+    if (get_path_param(req->uri, "/api/v1/sources/", &id) != 0)
+        return send_error(req, "invalid id", 400);
+
+    if (f_source_remove(h->source, id) != ESP_OK)
+        return send_error(req, "source not found", 404);
+
+    if (h->config) f_config_save_all(h->config, h->fan, h->source, h->curve, h->schedule);
 
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "status", "ok");
@@ -483,6 +593,9 @@ static esp_err_t curve_create_handler(httpd_req_t *req)
         return send_error(req, "name and points required", 400);
     }
 
+    CHECK(f_constraints_name(name_node->valuestring, &_v), req);
+    CHECK(f_constraints_curve_count(f_curve_get_count(h->curve), &_v), req);
+
     f_curve_info_t info;
     memset(&info, 0, sizeof(info));
     strncpy(info.name, name_node->valuestring, ESPFM_NAME_MAX - 1);
@@ -497,10 +610,14 @@ static esp_err_t curve_create_handler(httpd_req_t *req)
         info.points[i].duty   = (uint8_t)(d ? d->valueint : 0);
     }
 
+    CHECK(f_constraints_curve_points(info.points, info.num_points, &_v), req);
+
     uint8_t new_id;
     esp_err_t err = f_curve_upsert(h->curve, &info, &new_id);
     cJSON_Delete(json);
     if (err != ESP_OK) return send_error(req, "failed to create curve", 500);
+
+    if (h->config) f_config_save_all(h->config, h->fan, h->source, h->curve, h->schedule);
 
     f_curve_get_info(h->curve, new_id, &info);
     cJSON *root = cJSON_CreateObject();
@@ -530,8 +647,10 @@ static esp_err_t curve_update_handler(httpd_req_t *req)
     info.id = id;
 
     cJSON *name_node = cJSON_GetObjectItem(json, "name");
-    if (cJSON_IsString(name_node))
+    if (cJSON_IsString(name_node)) {
+        CHECK(f_constraints_name(name_node->valuestring, &_v), req);
         strncpy(info.name, name_node->valuestring, ESPFM_NAME_MAX - 1);
+    }
 
     cJSON *pts_node = cJSON_GetObjectItem(json, "points");
     if (cJSON_IsArray(pts_node)) {
@@ -544,12 +663,15 @@ static esp_err_t curve_update_handler(httpd_req_t *req)
             info.points[i].temp_c = (float)(tc ? tc->valuedouble : 0.0);
             info.points[i].duty   = (uint8_t)(d ? d->valueint : 0);
         }
+        CHECK(f_constraints_curve_points(info.points, info.num_points, &_v), req);
     }
 
     uint8_t out_id;
     esp_err_t err = f_curve_upsert(h->curve, &info, &out_id);
     cJSON_Delete(json);
     if (err != ESP_OK) return send_error(req, "failed to update curve", 500);
+
+    if (h->config) f_config_save_all(h->config, h->fan, h->source, h->curve, h->schedule);
 
     f_curve_get_info(h->curve, out_id, &info);
     cJSON *root = cJSON_CreateObject();
@@ -569,6 +691,8 @@ static esp_err_t curve_delete_handler(httpd_req_t *req)
 
     if (f_curve_remove(h->curve, id) != ESP_OK)
         return send_error(req, "curve not found", 404);
+
+    if (h->config) f_config_save_all(h->config, h->fan, h->source, h->curve, h->schedule);
 
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "status", "ok");
@@ -631,6 +755,10 @@ static esp_err_t schedule_create_handler(httpd_req_t *req)
         return send_error(req, "fan_id, duty, start_min, and end_min required", 400);
     }
 
+    CHECK(f_constraints_duty(duty_node->valueint, &_v), req);
+    CHECK(f_constraints_schedule_time(start_node->valueint, end_node->valueint, &_v), req);
+    CHECK(f_constraints_schedule_count(f_schedule_get_count(h->schedule), &_v), req);
+
     f_schedule_info_t info = {
         .fan_id = (uint8_t)fan_node->valueint,
         .duty = (uint8_t)duty_node->valueint,
@@ -647,12 +775,68 @@ static esp_err_t schedule_create_handler(httpd_req_t *req)
     cJSON_Delete(json);
     if (err != ESP_OK) return send_error(req, "failed to create schedule", 500);
 
+    if (h->config) f_config_save_all(h->config, h->fan, h->source, h->curve, h->schedule);
+
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "status", "ok");
     cJSON *data = cJSON_CreateObject();
     cJSON_AddNumberToObject(data, "id", new_id);
     cJSON_AddItemToObject(root, "data", data);
     return send_json(req, root, "201 Created");
+}
+
+static esp_err_t schedule_update_handler(httpd_req_t *req)
+{
+    f_http_handle_t h = (f_http_handle_t)req->user_ctx;
+    if (h == NULL || h->schedule == NULL) return send_error(req, "not ready", 503);
+
+    uint8_t id;
+    if (get_path_param(req->uri, "/api/v1/schedules/", &id) != 0)
+        return send_error(req, "invalid id", 400);
+
+    char body[1024];
+    if (!read_body(req, body, sizeof(body)))
+        return send_error(req, "empty body", 400);
+
+    cJSON *json = cJSON_Parse(body);
+    if (json == NULL) return send_error(req, "invalid JSON", 400);
+
+    cJSON *fan_node = cJSON_GetObjectItem(json, "fan_id");
+    cJSON *duty_node = cJSON_GetObjectItem(json, "duty");
+    cJSON *start_node = cJSON_GetObjectItem(json, "start_min");
+    cJSON *end_node = cJSON_GetObjectItem(json, "end_min");
+
+    if (!cJSON_IsNumber(fan_node) || !cJSON_IsNumber(duty_node) ||
+        !cJSON_IsNumber(start_node) || !cJSON_IsNumber(end_node)) {
+        cJSON_Delete(json);
+        return send_error(req, "fan_id, duty, start_min, and end_min required", 400);
+    }
+
+    CHECK(f_constraints_duty(duty_node->valueint, &_v), req);
+    CHECK(f_constraints_schedule_time(start_node->valueint, end_node->valueint, &_v), req);
+
+    f_schedule_info_t info = {
+        .fan_id    = (uint8_t)fan_node->valueint,
+        .duty      = (uint8_t)duty_node->valueint,
+        .start_min = (uint16_t)start_node->valueint,
+        .end_min   = (uint16_t)end_node->valueint,
+        .enabled   = true,
+    };
+
+    cJSON *en_node = cJSON_GetObjectItem(json, "enabled");
+    if (cJSON_IsBool(en_node)) info.enabled = cJSON_IsTrue(en_node);
+
+    esp_err_t err = f_schedule_update(h->schedule, id, &info);
+    cJSON_Delete(json);
+    if (err != ESP_OK) return send_error(req, "schedule not found", 404);
+
+    if (h->config) f_config_save_all(h->config, h->fan, h->source, h->curve, h->schedule);
+
+    f_schedule_get_info(h->schedule, id, &info);
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "status", "ok");
+    cJSON_AddItemToObject(root, "data", schedule_to_json(&info));
+    return send_json(req, root, "200 OK");
 }
 
 static esp_err_t schedule_delete_handler(httpd_req_t *req)
@@ -667,6 +851,8 @@ static esp_err_t schedule_delete_handler(httpd_req_t *req)
     if (f_schedule_remove(h->schedule, id) != ESP_OK)
         return send_error(req, "schedule not found", 404);
 
+    if (h->config) f_config_save_all(h->config, h->fan, h->source, h->curve, h->schedule);
+
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "status", "ok");
     cJSON_AddNullToObject(root, "data");
@@ -679,8 +865,6 @@ static esp_err_t schedule_delete_handler(httpd_req_t *req)
 
 static esp_err_t wifi_scan_handler(httpd_req_t *req)
 {
-    f_http_handle_t h = (f_http_handle_t)req->user_ctx;
-
     wifi_scan_config_t scan_cfg = {
         .ssid = NULL,
         .bssid = NULL,
@@ -878,12 +1062,20 @@ static esp_err_t static_file_handler(httpd_req_t *req)
 /*  Public API                                                         */
 /* ================================================================== */
 
-esp_err_t f_http_init(f_http_handle_t *handle)
+esp_err_t f_http_init(f_http_handle_t *handle, f_fan_handle_t fan,
+                      f_source_handle_t source, f_curve_handle_t curve,
+                      f_schedule_handle_t schedule, f_config_handle_t config)
 {
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
 
     f_http_handle_t h = calloc(1, sizeof(struct f_http));
     if (h == NULL) return ESP_ERR_NO_MEM;
+
+    h->fan = fan;
+    h->source = source;
+    h->curve = curve;
+    h->schedule = schedule;
+    h->config = config;
 
     esp_event_handler_register(ESPFM_EVENT, ESPFM_EVENT_WIFI_CONNECTED,
                                _on_wifi_connected, h);
@@ -895,9 +1087,7 @@ esp_err_t f_http_init(f_http_handle_t *handle)
     return ESP_OK;
 }
 
-esp_err_t f_http_start(f_http_handle_t handle, f_fan_handle_t fan,
-                       f_source_handle_t source, f_curve_handle_t curve,
-                       f_schedule_handle_t schedule)
+esp_err_t f_http_start(f_http_handle_t handle)
 {
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
 
@@ -906,18 +1096,14 @@ esp_err_t f_http_start(f_http_handle_t handle, f_fan_handle_t fan,
         return ESP_OK;
     }
 
-    handle->fan = fan;
-    handle->source = source;
-    handle->curve = curve;
-    handle->schedule = schedule;
+    httpd_config_t httpd_cfg = HTTPD_DEFAULT_CONFIG();
+    httpd_cfg.stack_size      = 8192;  /* need headroom: curve handlers have body[2048] on stack */
+    httpd_cfg.uri_match_fn    = httpd_uri_match_wildcard;
+    httpd_cfg.max_uri_handlers = 24;
+    httpd_cfg.server_port     = 80;
+    httpd_cfg.lru_purge_enable = true;
 
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 24;
-    config.server_port = 80;
-    config.lru_purge_enable = true;
-
-    esp_err_t err = httpd_start(&handle->server, &config);
+    esp_err_t err = httpd_start(&handle->server, &httpd_cfg);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start HTTP server: %d", err);
         return err;
@@ -946,7 +1132,8 @@ esp_err_t f_http_start(f_http_handle_t handle, f_fan_handle_t fan,
     const httpd_uri_t src_uris[] = {
         { .uri = "/api/v1/sources",      .method = HTTP_GET,  .handler = sources_list_handler,  .user_ctx = handle },
         { .uri = "/api/v1/sources",      .method = HTTP_PUT,  .handler = source_create_handler, .user_ctx = handle },
-        { .uri = "/api/v1/sources/temp", .method = HTTP_POST, .handler = source_temp_handler,   .user_ctx = handle },
+        { .uri = "/api/v1/sources/temp", .method = HTTP_POST,   .handler = source_temp_handler,   .user_ctx = handle },
+        { .uri = "/api/v1/sources/*",    .method = HTTP_DELETE, .handler = source_delete_handler, .user_ctx = handle },
     };
     for (int i = 0; i < sizeof(src_uris)/sizeof(src_uris[0]); i++)
         httpd_register_uri_handler(handle->server, &src_uris[i]);
@@ -966,6 +1153,7 @@ esp_err_t f_http_start(f_http_handle_t handle, f_fan_handle_t fan,
     const httpd_uri_t sched_uris[] = {
         { .uri = "/api/v1/schedules",   .method = HTTP_GET,    .handler = schedules_list_handler,  .user_ctx = handle },
         { .uri = "/api/v1/schedules",   .method = HTTP_PUT,    .handler = schedule_create_handler, .user_ctx = handle },
+        { .uri = "/api/v1/schedules/*", .method = HTTP_PUT,    .handler = schedule_update_handler, .user_ctx = handle },
         { .uri = "/api/v1/schedules/*", .method = HTTP_DELETE, .handler = schedule_delete_handler, .user_ctx = handle },
     };
     for (int i = 0; i < sizeof(sched_uris)/sizeof(sched_uris[0]); i++)
@@ -994,7 +1182,7 @@ esp_err_t f_http_start(f_http_handle_t handle, f_fan_handle_t fan,
     };
     httpd_register_uri_handler(handle->server, &static_uri);
 
-    ESP_LOGI(TAG, "HTTP server started on port %d (WiFi-aware)", config.server_port);
+    ESP_LOGI(TAG, "HTTP server started on port %d (WiFi-aware)", httpd_cfg.server_port);
     return ESP_OK;
 }
 

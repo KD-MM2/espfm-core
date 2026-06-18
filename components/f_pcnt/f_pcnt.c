@@ -34,7 +34,7 @@ esp_err_t f_pcnt_add_input(f_pcnt_handle_t handle, uint8_t gpio, uint8_t *unit_i
 
     pcnt_unit_config_t unit_cfg = {
         .high_limit = 32767,
-        .low_limit = -1,
+        .low_limit = -32768,
     };
     pcnt_unit_handle_t unit = NULL;
     ESP_ERROR_CHECK(pcnt_new_unit(&unit_cfg, &unit));

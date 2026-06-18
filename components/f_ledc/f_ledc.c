@@ -90,8 +90,16 @@ esp_err_t f_ledc_set_duty(f_ledc_handle_t handle, uint8_t channel_id,
     if (!handle->channel_in_use[channel_id]) return ESP_ERR_INVALID_STATE;
 
     uint32_t raw = duty_percent_to_raw(duty_percent, handle->max_duty_raw);
-    ESP_ERROR_CHECK(ledc_set_duty(handle->speed_mode, channel_id, raw));
-    ESP_ERROR_CHECK(ledc_update_duty(handle->speed_mode, channel_id));
+    esp_err_t err = ledc_set_duty(handle->speed_mode, channel_id, raw);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ledc_set_duty ch%d failed: %s", channel_id, esp_err_to_name(err));
+        return err;
+    }
+    err = ledc_update_duty(handle->speed_mode, channel_id);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ledc_update_duty ch%d failed: %s", channel_id, esp_err_to_name(err));
+        return err;
+    }
     handle->current_duty[channel_id] = duty_percent;
     return ESP_OK;
 }
@@ -110,9 +118,14 @@ esp_err_t f_ledc_remove_channel(f_ledc_handle_t handle, uint8_t channel_id) {
     if (!handle->channel_in_use[channel_id]) return ESP_ERR_INVALID_STATE;
 
     /* Set duty to 0 before removing */
-    ledc_set_duty(handle->speed_mode, channel_id, 0);
-    ledc_update_duty(handle->speed_mode, channel_id);
-    ledc_stop(handle->speed_mode, channel_id, 0);
+    esp_err_t err = ledc_set_duty(handle->speed_mode, channel_id, 0);
+    if (err != ESP_OK) ESP_LOGW(TAG, "ledc_set_duty(0) ch%d failed: %s", channel_id, esp_err_to_name(err));
+    err = ledc_update_duty(handle->speed_mode, channel_id);
+    if (err != ESP_OK) ESP_LOGW(TAG, "ledc_update_duty ch%d failed: %s", channel_id, esp_err_to_name(err));
+    err = ledc_stop(handle->speed_mode, channel_id, 0);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "ledc_stop ch%d failed: %s", channel_id, esp_err_to_name(err));
+    }
 
     handle->channel_in_use[channel_id] = false;
     handle->channel_gpio[channel_id] = 0;

@@ -7,6 +7,7 @@ static const char *TAG = "f_adc";
 
 struct f_adc {
     adc_oneshot_unit_handle_t unit;
+    uint16_t configured_channels;  /* bitmask of already-configured channels */
 };
 
 esp_err_t f_adc_init(f_adc_handle_t *handle) {
@@ -47,7 +48,10 @@ esp_err_t f_adc_read_raw(f_adc_handle_t handle, uint8_t gpio, int *raw_out) {
         .atten = ADC_ATTEN_DB_12,
         .bitwidth = ADC_BITWIDTH_12,
     };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(handle->unit, channel, &chan_cfg));
+    if (!(handle->configured_channels & (1 << (unsigned)channel))) {
+        ESP_ERROR_CHECK(adc_oneshot_config_channel(handle->unit, channel, &chan_cfg));
+        handle->configured_channels |= (1 << (unsigned)channel);
+    }
     ESP_ERROR_CHECK(adc_oneshot_read(handle->unit, channel, raw_out));
     return ESP_OK;
 }

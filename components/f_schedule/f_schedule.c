@@ -23,6 +23,8 @@ static void _sched_timer_cb(TimerHandle_t timer) {
     f_schedule_handle_t sched = (f_schedule_handle_t)pvTimerGetTimerID(timer);
     struct timeval tv;
     gettimeofday(&tv, NULL);
+    /* Guard: skip schedule evaluation until SNTP has set a reasonable time */
+    if (tv.tv_sec < 1700000000) return;
     uint16_t now_min = (uint16_t)((tv.tv_sec / 60) % 1440);
 
     for (int i = 0; i < F_SCHEDULE_MAX_COUNT; i++) {
@@ -87,6 +89,20 @@ esp_err_t f_schedule_remove(f_schedule_handle_t handle, uint8_t id) {
     memset(&handle->rules[id], 0, sizeof(f_schedule_info_t));
     handle->slot_used[id] = false;
     handle->count--;
+    return ESP_OK;
+}
+
+esp_err_t f_schedule_update(f_schedule_handle_t handle, uint8_t id,
+                             const f_schedule_info_t *info) {
+    if (handle == NULL || info == NULL || id >= F_SCHEDULE_MAX_COUNT)
+        return ESP_ERR_INVALID_ARG;
+    if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
+
+    handle->rules[id].fan_id    = info->fan_id;
+    handle->rules[id].duty      = info->duty;
+    handle->rules[id].start_min = info->start_min;
+    handle->rules[id].end_min   = info->end_min;
+    handle->rules[id].enabled   = info->enabled;
     return ESP_OK;
 }
 

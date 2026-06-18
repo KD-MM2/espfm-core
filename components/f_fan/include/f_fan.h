@@ -27,6 +27,7 @@ typedef struct {
     uint8_t   source_id;
     uint8_t   curve_id;
     uint8_t   schedule_id;
+    uint8_t   group_id;
 } f_fan_info_t;
 
 typedef struct f_fan *f_fan_handle_t;
@@ -37,6 +38,11 @@ esp_err_t f_fan_add(f_fan_handle_t handle, uint8_t pwm_gpio, uint8_t tach_gpio,
 esp_err_t f_fan_remove(f_fan_handle_t handle, uint8_t id);
 esp_err_t f_fan_set_duty(f_fan_handle_t handle, uint8_t id, uint8_t duty);
 esp_err_t f_fan_set_mode(f_fan_handle_t handle, uint8_t id, fan_mode_t mode);
+esp_err_t f_fan_set_source(f_fan_handle_t handle, uint8_t id, uint8_t source_id);
+esp_err_t f_fan_set_curve(f_fan_handle_t handle, uint8_t id, uint8_t curve_id);
+esp_err_t f_fan_set_schedule(f_fan_handle_t handle, uint8_t id, uint8_t schedule_id);
+esp_err_t f_fan_set_inverted(f_fan_handle_t handle, uint8_t id, bool inverted);
+esp_err_t f_fan_set_group(f_fan_handle_t handle, uint8_t id, uint8_t group_id);
 esp_err_t f_fan_update_rpm(f_fan_handle_t handle, uint8_t id);
 esp_err_t f_fan_get_info(f_fan_handle_t handle, uint8_t id, f_fan_info_t *info_out);
 uint8_t f_fan_get_count(f_fan_handle_t handle);

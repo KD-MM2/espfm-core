@@ -1,12 +1,16 @@
 menu "ESPFanManager Configuration"
     config ESPFM_WIFI_SSID
         string "WiFi SSID"
-        default "TP-Link_E84F_2G"
+        default "myssid"
     config ESPFM_WIFI_PASSWORD
         string "WiFi Password"
-        default "LE5!3#LS&J9Yji"
+        default "mypassword"
     config ESPFM_WIFI_MAX_RETRY
         int "Maximum WiFi retry attempts"
         default 5
         range 1 20
+    config ESPFM_OVERTEMP_THRESHOLD_C
+        int "Over-temperature alarm threshold (deg C)"
+        default 85
+        range 50 150
 endmenu

@@ -60,6 +60,7 @@ esp_err_t f_fan_add(f_fan_handle_t handle, uint8_t pwm_gpio, uint8_t tach_gpio,
     ch->source_id = 0xFF;
     ch->curve_id = 0xFF;
     ch->schedule_id = 0xFF;
+    ch->group_id = 0;
 
     handle->slot_used[slot] = true;
     handle->ledc_channel_id[slot] = ledc_ch;
@@ -107,6 +108,46 @@ esp_err_t f_fan_set_mode(f_fan_handle_t handle, uint8_t id, fan_mode_t mode) {
     if (handle == NULL || id >= F_FAN_MAX_COUNT) return ESP_ERR_INVALID_ARG;
     if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
     handle->channels[id].mode = mode;
+    return ESP_OK;
+}
+
+esp_err_t f_fan_set_source(f_fan_handle_t handle, uint8_t id, uint8_t source_id) {
+    if (handle == NULL || id >= F_FAN_MAX_COUNT) return ESP_ERR_INVALID_ARG;
+    if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
+    handle->channels[id].source_id = source_id;
+    return ESP_OK;
+}
+
+esp_err_t f_fan_set_curve(f_fan_handle_t handle, uint8_t id, uint8_t curve_id) {
+    if (handle == NULL || id >= F_FAN_MAX_COUNT) return ESP_ERR_INVALID_ARG;
+    if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
+    handle->channels[id].curve_id = curve_id;
+    return ESP_OK;
+}
+
+esp_err_t f_fan_set_schedule(f_fan_handle_t handle, uint8_t id, uint8_t schedule_id) {
+    if (handle == NULL || id >= F_FAN_MAX_COUNT) return ESP_ERR_INVALID_ARG;
+    if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
+    handle->channels[id].schedule_id = schedule_id;
+    return ESP_OK;
+}
+
+esp_err_t f_fan_set_inverted(f_fan_handle_t handle, uint8_t id, bool inverted) {
+    if (handle == NULL || id >= F_FAN_MAX_COUNT) return ESP_ERR_INVALID_ARG;
+    if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
+    handle->channels[id].inverted = inverted;
+    /* Re-apply current duty with new inversion */
+    uint8_t cur = handle->channels[id].duty;
+    uint8_t effective = inverted ? (100 - cur) : cur;
+    float pct = (float)effective;
+    f_ledc_set_duty(handle->ledc, handle->ledc_channel_id[id], pct);
+    return ESP_OK;
+}
+
+esp_err_t f_fan_set_group(f_fan_handle_t handle, uint8_t id, uint8_t group_id) {
+    if (handle == NULL || id >= F_FAN_MAX_COUNT) return ESP_ERR_INVALID_ARG;
+    if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
+    handle->channels[id].group_id = group_id;
     return ESP_OK;
 }
 

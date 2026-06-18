@@ -10,7 +10,7 @@ static const char *TAG = "f_control";
 
 #define CONTROL_PERIOD_MS  1000
 #define CONTROL_PRIORITY    3
-#define CONTROL_STACK       3072
+#define CONTROL_STACK       4096
 #define DEFAULT_HYSTERESIS  3
 #define DEFAULT_RAMP_UP     10
 #define DEFAULT_RAMP_DOWN   3
@@ -29,6 +29,8 @@ struct f_control {
     uint8_t failsafe_safe_duty;
     uint8_t stall_counter[F_FAN_MAX_COUNT];
     uint8_t prev_duty[F_FAN_MAX_COUNT];
+    fan_alarm_t prev_alarm[F_FAN_MAX_COUNT];
+    uint8_t group_master[256];
 };
 
 /* --- Private helpers --- */
@@ -51,7 +53,39 @@ static uint8_t apply_ramp(uint8_t current, uint8_t target,
 
 static void _ctrl_callback(const f_fan_info_t *fan, void *ctx) {
     f_control_handle_t ctrl = (f_control_handle_t)ctx;
-    if (fan->mode != FAN_MODE_AUTO || !fan->enabled) return;
+    if (!fan->enabled) return;
+
+    /* Always update RPM for every enabled fan, regardless of mode */
+    f_fan_update_rpm(ctrl->fan, fan->id);
+
+    /* Stall detection applies to ALL fans (manual or auto) */
+    f_fan_info_t info;
+    f_fan_get_info(ctrl->fan, fan->id, &info);
+    fan_alarm_t new_alarm = FAN_ALARM_NONE;
+
+    if (info.duty > 0 && info.rpm == 0) {
+        ctrl->stall_counter[fan->id]++;
+        if (ctrl->stall_counter[fan->id] >= 3) {
+            ESP_LOGW(TAG, "Fan %d STALL alarm (duty=%d%%, rpm=0 for %d ticks)",
+                     fan->id, info.duty, ctrl->stall_counter[fan->id]);
+            new_alarm = FAN_ALARM_STALL;
+        }
+    } else {
+        ctrl->stall_counter[fan->id] = 0;
+    }
+
+    if (fan->mode != FAN_MODE_AUTO) {
+        /* Post alarm events and return — rest is AUTO-only */
+        if (new_alarm != FAN_ALARM_NONE && ctrl->prev_alarm[fan->id] == FAN_ALARM_NONE) {
+            esp_event_post(ESPFM_EVENT, ESPFM_EVENT_FAN_ALARM, NULL, 0, 0);
+        } else if (new_alarm == FAN_ALARM_NONE && ctrl->prev_alarm[fan->id] != FAN_ALARM_NONE) {
+            esp_event_post(ESPFM_EVENT, ESPFM_EVENT_FAN_ALARM_CLEAR, NULL, 0, 0);
+        }
+        ctrl->prev_alarm[fan->id] = new_alarm;
+        return;
+    }
+
+    /* --- AUTO mode only below --- */
 
     /* 1. Read source temperature */
     float temp_c;
@@ -73,13 +107,13 @@ static void _ctrl_callback(const f_fan_info_t *fan, void *ctx) {
                 break;
         }
         esp_event_post(ESPFM_EVENT, ESPFM_EVENT_SOURCE_INVALID, NULL, 0, 0);
-        return;
+        goto check_alarm;
     }
 
     /* 3. Look up target duty from curve */
     uint8_t target_duty;
     if (f_curve_lookup(ctrl->curve, fan->curve_id, temp_c, &target_duty) != ESP_OK) {
-        return; /* No curve assigned, skip */
+        goto check_alarm; /* No curve assigned, skip to alarm post */
     }
 
     /* 4. Apply hysteresis + ramp-up/down */
@@ -90,24 +124,21 @@ static void _ctrl_callback(const f_fan_info_t *fan, void *ctx) {
     f_fan_set_duty(ctrl->fan, fan->id, final_duty);
     ctrl->prev_duty[fan->id] = final_duty;
 
-    /* 5. Update RPM */
-    f_fan_update_rpm(ctrl->fan, fan->id);
-
-    /* 6. Diagnostics: stall detection */
-    f_fan_info_t info;
-    f_fan_get_info(ctrl->fan, fan->id, &info);
-    if (info.duty > 0 && info.rpm == 0) {
-        ctrl->stall_counter[fan->id]++;
-        if (ctrl->stall_counter[fan->id] >= 5) {
-            ESP_LOGW(TAG, "Fan %d STALL alarm (duty=%d, rpm=0)", fan->id, info.duty);
-            esp_event_post(ESPFM_EVENT, ESPFM_EVENT_FAN_ALARM, NULL, 0, 0);
-        }
-    } else {
-        if (ctrl->stall_counter[fan->id] >= 5) {
-            esp_event_post(ESPFM_EVENT, ESPFM_EVENT_FAN_ALARM_CLEAR, NULL, 0, 0);
-        }
-        ctrl->stall_counter[fan->id] = 0;
+    /* Over-temp: check if source temp exceeds threshold */
+    if (status == SOURCE_STATUS_VALID && temp_c > (float)CONFIG_ESPFM_OVERTEMP_THRESHOLD_C) {
+        ESP_LOGW(TAG, "Fan %d OVER-TEMP alarm (%.1fC > %dC)",
+                 fan->id, temp_c, CONFIG_ESPFM_OVERTEMP_THRESHOLD_C);
+        new_alarm = FAN_ALARM_OVERTEMP;
     }
+
+check_alarm:
+    /* Alarm event posting on transition */
+    if (new_alarm != FAN_ALARM_NONE && ctrl->prev_alarm[fan->id] == FAN_ALARM_NONE) {
+        esp_event_post(ESPFM_EVENT, ESPFM_EVENT_FAN_ALARM, NULL, 0, 0);
+    } else if (new_alarm == FAN_ALARM_NONE && ctrl->prev_alarm[fan->id] != FAN_ALARM_NONE) {
+        esp_event_post(ESPFM_EVENT, ESPFM_EVENT_FAN_ALARM_CLEAR, NULL, 0, 0);
+    }
+    ctrl->prev_alarm[fan->id] = new_alarm;
 }
 
 static void _ctrl_task(void *arg) {
@@ -117,7 +148,35 @@ static void _ctrl_task(void *arg) {
              ctrl->ramp_up_pct, ctrl->ramp_down_pct);
 
     while (ctrl->running) {
+        /* Identify group masters (lowest ID per group) */
+        memset(ctrl->group_master, 0xFF, sizeof(ctrl->group_master));
+        for (uint8_t i = 0; i < F_FAN_MAX_COUNT; i++) {
+            f_fan_info_t info;
+            if (f_fan_get_info(ctrl->fan, i, &info) != ESP_OK) continue;
+            if (info.group_id > 0 && info.enabled) {
+                if (ctrl->group_master[info.group_id] == 0xFF) {
+                    ctrl->group_master[info.group_id] = i;
+                }
+            }
+        }
+
         f_fan_for_each(ctrl->fan, _ctrl_callback, ctrl);
+
+        /* Propagate master duty to followers in each group */
+        for (int g = 1; g < 255; g++) {
+            uint8_t mid = ctrl->group_master[g];
+            if (mid == 0xFF) continue;
+            f_fan_info_t minfo;
+            if (f_fan_get_info(ctrl->fan, mid, &minfo) != ESP_OK) continue;
+            for (uint8_t i = 0; i < F_FAN_MAX_COUNT; i++) {
+                f_fan_info_t info;
+                if (f_fan_get_info(ctrl->fan, i, &info) != ESP_OK) continue;
+                if (i != mid && info.group_id == g && info.enabled) {
+                    f_fan_set_duty(ctrl->fan, i, minfo.duty);
+                }
+            }
+        }
+
         vTaskDelay(pdMS_TO_TICKS(CONTROL_PERIOD_MS));
     }
     vTaskDelete(NULL);
