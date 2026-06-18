@@ -1,0 +1,193 @@
+syntax = "proto3";
+
+// ESPFanManager v3 — CoAP + Protobuf protocol schema
+// Generate with: nanopb_generator.py espfm.proto -D ../components/f_coap/include/
+
+// ===== Enums =====
+
+enum FanMode {
+    FAN_MODE_MANUAL = 0;
+    FAN_MODE_AUTO   = 1;
+}
+
+enum SourceType {
+    SOURCE_TYPE_MANUAL  = 0;
+    SOURCE_TYPE_NTC     = 1;
+    SOURCE_TYPE_DS18B20 = 2;
+}
+
+enum SourceStatus {
+    SOURCE_STATUS_VALID   = 0;
+    SOURCE_STATUS_STALE   = 1;
+    SOURCE_STATUS_INVALID = 2;
+}
+
+enum FanAlarm {
+    FAN_ALARM_NONE     = 0;
+    FAN_ALARM_STALL    = 1;
+    FAN_ALARM_OVERTEMP = 2;
+}
+
+// ===== Core Data Types =====
+
+message FanInfo {
+    uint32 id          = 1;
+    string name        = 2;   // max 15 chars
+    FanMode mode       = 3;
+    uint32 duty        = 4;   // 0-100%
+    uint32 rpm         = 5;
+    bool enabled       = 6;
+    bool inverted      = 7;
+    uint32 pwm_gpio    = 8;
+    uint32 tach_gpio   = 9;   // 255=none
+    uint32 source_id   = 10;  // 255=none
+    uint32 curve_id    = 11;  // 255=none
+    uint32 schedule_id = 12;  // 255=none
+    uint32 group_id    = 13;
+    FanAlarm alarm     = 14;
+}
+
+message SourceInfo {
+    uint32 id            = 1;
+    string name          = 2;
+    SourceType type      = 3;
+    SourceStatus status  = 4;
+    float temp_c         = 5;
+    uint32 gpio          = 6;  // 255=none
+}
+
+message CurvePoint {
+    float temp_c  = 1;
+    uint32 duty   = 2;  // 0-100%
+}
+
+message CurveInfo {
+    uint32 id                   = 1;
+    string name                 = 2;
+    repeated CurvePoint points  = 3;  // 2-10 points
+}
+
+message ScheduleInfo {
+    uint32 id         = 1;
+    uint32 fan_id     = 2;
+    uint32 duty       = 3;   // 0-100%
+    uint32 start_min  = 4;   // 0-1439 minutes since midnight
+    uint32 end_min    = 5;
+    bool enabled      = 6;
+}
+
+message WifiApRecord {
+    string ssid     = 1;
+    int32 rssi      = 2;
+    uint32 channel  = 3;
+    uint32 authmode = 4;
+}
+
+message SystemInfo {
+    string version        = 1;
+    uint32 uptime_s       = 2;
+    uint32 heap_free      = 3;
+    uint32 fan_count      = 4;
+    uint32 source_count   = 5;
+    uint32 curve_count    = 6;
+    uint32 schedule_count = 7;
+}
+
+message WifiStatus {
+    bool sta_connected = 1;
+    string sta_ip      = 2;
+    string ap_ip       = 3;
+}
+
+// ===== Fan CRUD =====
+
+message FanList { repeated FanInfo fans = 1; }
+
+message FanCreateRequest {
+    uint32 pwm_gpio  = 1;
+    uint32 tach_gpio = 2;  // optional, 255=none
+    string name      = 3;
+}
+
+message FanUpdateRequest {
+    uint32 id          = 1;  // required
+    FanMode mode       = 2;  // optional
+    uint32 duty        = 3;  // optional
+    uint32 source_id   = 4;  // optional
+    uint32 curve_id    = 5;  // optional
+    uint32 schedule_id = 6;  // optional
+    uint32 group_id    = 7;  // optional
+    bool inverted      = 8;  // optional
+}
+
+message FanId { uint32 id = 1; }
+
+// ===== Source CRUD =====
+
+message SourceList { repeated SourceInfo sources = 1; }
+
+message SourceCreateRequest {
+    SourceType type = 1;
+    string name     = 2;
+    uint32 gpio     = 3;  // optional, 255=none
+}
+
+message ManualTempRequest {
+    uint32 id   = 1;
+    float temp_c = 2;
+}
+
+// ===== Curve CRUD =====
+
+message CurveList { repeated CurveInfo curves = 1; }
+
+message CurveCreateRequest {
+    string name                 = 1;
+    repeated CurvePoint points  = 2;
+}
+
+message CurveUpdateRequest {
+    uint32 id                   = 1;
+    string name                 = 2;
+    repeated CurvePoint points  = 3;
+}
+
+// ===== Schedule CRUD =====
+
+message ScheduleList { repeated ScheduleInfo schedules = 1; }
+
+message ScheduleCreateRequest {
+    uint32 fan_id    = 1;
+    uint32 duty      = 2;
+    uint32 start_min = 3;
+    uint32 end_min   = 4;
+    bool enabled     = 5;
+}
+
+message ScheduleUpdateRequest {
+    uint32 id        = 1;
+    uint32 fan_id    = 2;
+    uint32 duty      = 3;
+    uint32 start_min = 4;
+    uint32 end_min   = 5;
+    bool enabled     = 6;
+}
+
+// ===== WiFi =====
+
+message WifiScanResult { repeated WifiApRecord aps = 1; }
+
+message WifiConnectRequest {
+    string ssid     = 1;
+    string password = 2;
+}
+
+// ===== Generic Responses =====
+
+message Empty {}
+
+message StatusResponse {
+    bool ok            = 1;
+    uint32 error_code  = 2;  // 0 on success
+    string error_msg   = 3;  // empty on success
+}
