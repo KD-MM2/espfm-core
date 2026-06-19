@@ -14,8 +14,8 @@
 
 static const char *TAG = "f_coap";
 #define COAP_PORT 5683
-#define COAP_MTU 1500
-#define COAP_TASK_STACK 4096
+#define COAP_MTU 1280
+#define COAP_TASK_STACK 6144
 #define COAP_TASK_PRIO 4
 
 /* Inline field descriptors */
