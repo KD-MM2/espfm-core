@@ -83,10 +83,13 @@ static void sc2pb(const f_schedule_info_t *si, ScheduleInfo *pb) { *pb=(Schedule
 /* ---- f_coap struct ---- */
 struct f_coap { int sock; bool running; TaskHandle_t task; f_fan_handle_t fan; f_source_handle_t source; f_curve_handle_t curve; f_schedule_handle_t schedule; f_config_handle_t config; };
 
+/* Global handle for microcoap handler (single-instance server) */
+static struct f_coap *g_coap = NULL;
+
 /* ---- Microcoap endpoint handler ---- */
 static int micro_handler(coap_rw_buffer_t *scratch, const coap_packet_t *inpkt, coap_packet_t *outpkt, uint8_t id_hi, uint8_t id_lo)
 {
-    struct f_coap *h = (struct f_coap*)scratch->p;
+    struct f_coap *h = g_coap;
     uint8_t rx[1024], tx[1024];
     int rsp_code = COAP_RSPCODE_CONTENT;
 
@@ -278,9 +281,9 @@ send_empty:
 }
 /* ---- CoAP server task ---- */
 static void coap_task(void *arg) {
-    struct f_coap *h=arg; uint8_t rx[COAP_MTU], tx[COAP_MTU];
+    struct f_coap *h=arg; g_coap = h;
+    uint8_t rx[COAP_MTU], tx[COAP_MTU];
     coap_rw_buffer_t scratch = {tx, COAP_MTU};
-    scratch.p = (uint8_t*)h;
     ESP_LOGI(TAG,"CoAP on :%d",COAP_PORT);
     while(h->running) {
         struct sockaddr_in from; socklen_t fl=sizeof(from);
