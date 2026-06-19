@@ -34,10 +34,10 @@ typedef enum { PB_ATYPE_STATIC=0 } pb_atype_t;
 
 /* Helpers */
 #define SIZEOF_MEMBER(s,f) sizeof(((s*)0)->f)
-#define PB_FIELD(tag,type,htype,atype,first,struc,fld,...) \
+#define PB_FIELD(tag,type,htype,atype,first,struc,fld,prev,...) \
     {tag,PB_LTYPE_##type,PB_HTYPE_##htype,PB_ATYPE_##atype,0, \
      offsetof(struc,fld),SIZEOF_MEMBER(struc,fld), \
-     offsetof(struc,first),__VA_ARGS__}
+     offsetof(struc,first), ##__VA_ARGS__}
 #define PB_LAST_FIELD {0,0,0,0,0,0,0,0,0}
 
 /* Field descriptor */

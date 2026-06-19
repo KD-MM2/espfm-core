@@ -18,7 +18,7 @@
 #include "f_curve.h"
 #include "f_control.h"
 #include "f_schedule.h"
-#include "f_http.h"
+#include "f_coap.h"
 #include "f_config.h"
 
 static const char *TAG = "espfm";
@@ -78,9 +78,9 @@ void app_main(void) {
     ESP_ERROR_CHECK(f_config_init(&config, "storage", "/littlefs"));
     ESP_ERROR_CHECK(f_config_load_all(config, fan, source, curve, schedule));
 
-    /* --- HTTP Server (registers handlers with handles, starts on WiFi event) --- */
-    f_http_handle_t http;
-    ESP_ERROR_CHECK(f_http_init(&http, fan, source, curve, schedule, config));
+    /* --- CoAP Server (UDP :5683, Protobuf, WiFi-aware lifecycle) --- */
+    f_coap_handle_t coap;
+    ESP_ERROR_CHECK(f_coap_init(&coap, fan, source, curve, schedule, config));
 
     /* --- WiFi APSTA (AP starts immediately) --- */
     f_wifi_handle_t wifi;
