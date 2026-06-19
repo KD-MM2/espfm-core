@@ -16,7 +16,7 @@
 static const char *TAG = "f_coap";
 #define COAP_PORT 5683
 #define COAP_MTU 1280
-#define COAP_TASK_STACK 6144
+#define COAP_TASK_STACK 8192
 #define COAP_TASK_PRIO 4
 
 /* ---- PB field descriptors (inline, same proven format) ---- */
@@ -90,7 +90,7 @@ static struct f_coap *g_coap = NULL;
 static int micro_handler(coap_rw_buffer_t *scratch, const coap_packet_t *inpkt, coap_packet_t *outpkt, uint8_t id_hi, uint8_t id_lo)
 {
     struct f_coap *h = g_coap;
-    uint8_t rx[1024], tx[1024];
+    static uint8_t rx[1024], tx[1024];
     int rsp_code = COAP_RSPCODE_CONTENT;
 
     if(inpkt->payload.len > 0 && inpkt->payload.len < 1024)
@@ -282,7 +282,7 @@ send_empty:
 /* ---- CoAP server task ---- */
 static void coap_task(void *arg) {
     struct f_coap *h=arg; g_coap = h;
-    uint8_t rx[COAP_MTU], tx[COAP_MTU];
+    static uint8_t rx[COAP_MTU], tx[COAP_MTU];
     coap_rw_buffer_t scratch = {tx, COAP_MTU};
     ESP_LOGI(TAG,"CoAP on :%d",COAP_PORT);
     while(h->running) {
