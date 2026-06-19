@@ -50,7 +50,7 @@ bool pb_encode(pb_ostream_t *s, const pb_field_t f[], const void *src) {
         case 0:{uint64_t v=0;memcpy(&v,p,fd->data_size<=4?fd->data_size:4);if(!pb_encode_varint(s,v))return false;}break;
         case 1:{int64_t sv=0;memcpy(&sv,p,fd->data_size<=4?fd->data_size:4);uint64_t v=(uint64_t)((sv<<1)^(sv>>63));if(!pb_encode_varint(s,v))return false;}break;
         case 2: if(!pb_write(s,p,4))return false; break;
-        case 4: if(!pb_encode_varint(s,strnlen((const char*)p,fd->data_size))||!pb_write(s,p,strnlen((const char*)p,fd->data_size)))return false; break;
+        case 4: {size_t sl=strnlen((const char*)p,128);if(!pb_encode_varint(s,sl)||!pb_write(s,p,sl))return false;} break;
         case 5: if(fd->htype==PB_HTYPE_REPEATED){for(size_t k=0;k<cnt;k++){if(!pb_encode(s,(const pb_field_t*)fd->ptr,(void*)(p+k*fd->data_size)))return false;}} else{if(!pb_encode(s,(const pb_field_t*)fd->ptr,(void*)p))return false;} break;
         default:break;
         }
@@ -72,7 +72,7 @@ bool pb_decode(pb_istream_t *s, const pb_field_t f[], void *dest) {
         if(wt==0){uint64_t v;pb_decode_varint(s,&v);if(fd->type==1){int64_t sv=(int64_t)(v>>1);if(v&1)sv=~sv;memcpy(p,&sv,fd->data_size<=4?fd->data_size:4);}else memcpy(p,&v,fd->data_size<=4?fd->data_size:4);}
         else if(wt==5)pb_read(s,p,4);
         else if(wt==2){uint64_t len;if(!pb_decode_varint(s,&len)||len>s->bytes_left)return false;
-            if(fd->type==4){size_t l=len;if(l>fd->data_size-1)l=fd->data_size-1;pb_read(s,p,l);p[l]=0;}
+            if(fd->type==4){size_t l=len;if(l>127)l=127;pb_read(s,p,l);p[l]=0;}
             else if(fd->type==5){pb_byte_t *tgt=p;if(fd->htype==PB_HTYPE_REPEATED){pb_size_t *c=(pb_size_t*)(((pb_byte_t*)dest)+fd->size_offset);if(*c>255)return false;tgt=p+(*c)*fd->data_size;}pb_istream_t sub={0};sub.bytes_left=len;sub.state=s->state;pb_decode(&sub,(const pb_field_t*)fd->ptr,(void*)tgt);s->state=sub.state;s->bytes_left-=len;}}
         if(fd->htype==PB_HTYPE_REPEATED){pb_size_t *c=(pb_size_t*)(((pb_byte_t*)dest)+fd->size_offset);(*c)++;}
         if(fd->htype==PB_HTYPE_OPTIONAL&&fd->ptr){*(bool*)(((pb_byte_t*)dest)+(uintptr_t)fd->ptr)=true;}

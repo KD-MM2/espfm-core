@@ -21,10 +21,13 @@ static const char *TAG = "f_coap";
 
 /* ---- PB field descriptors (inline, same proven format) ---- */
 #define F(tag,type,htype,atype,first,struc,fld,prev,...) {tag,PB_LTYPE_##type,PB_HTYPE_##htype,PB_ATYPE_##atype,0,offsetof(struc,fld),SIZEOF_MEMBER(struc,fld),offsetof(struc,first),NULL}
+#define FR(tag,type,htype,atype,first,struc,fld,prev,n,...) {tag,PB_LTYPE_##type,PB_HTYPE_##htype,PB_ATYPE_##atype,0,offsetof(struc,fld),ELEM_SIZE(struc,fld,n),offsetof(struc,first),NULL}
 #define FH(tag,type,htype,atype,first,struc,fld,prev,hasptr) {tag,PB_LTYPE_##type,PB_HTYPE_##htype,PB_ATYPE_##atype,0,offsetof(struc,fld),SIZEOF_MEMBER(struc,fld),offsetof(struc,first),(const void*)hasptr}
+#define FHR(tag,type,htype,atype,first,struc,fld,prev,n,hasptr) {tag,PB_LTYPE_##type,PB_HTYPE_##htype,PB_ATYPE_##atype,0,offsetof(struc,fld),ELEM_SIZE(struc,fld,n),offsetof(struc,first),(const void*)hasptr}
 #define L {0,0,0,0,0,0,0,0,0}
 
 #define SIZEOF_MEMBER(s,f) sizeof(((s*)0)->f)
+#define ELEM_SIZE(s,f,n)  (sizeof(((s*)0)->f)/(n))
 #define PB_LTYPE_UVARINT 0
 #define PB_LTYPE_UINT32  0
 #define PB_LTYPE_UENUM   0
@@ -43,28 +46,28 @@ static const char *TAG = "f_coap";
 #define PB_ATYPE_STATIC 0
 
 static const pb_field_t ff_FanInfo[]={F(1,UINT32,REQUIRED,STATIC,id,FanInfo,id,0),F(2,STRING,OPTIONAL,STATIC,id,FanInfo,name,id,0),F(3,UENUM,OPTIONAL,STATIC,id,FanInfo,mode,name,0),F(4,UINT32,OPTIONAL,STATIC,id,FanInfo,duty,mode,0),F(5,UINT32,OPTIONAL,STATIC,id,FanInfo,rpm,duty,0),F(6,BOOL,OPTIONAL,STATIC,id,FanInfo,enabled,rpm,0),F(7,BOOL,OPTIONAL,STATIC,id,FanInfo,inverted,enabled,0),F(8,UINT32,OPTIONAL,STATIC,id,FanInfo,pwm_gpio,inverted,0),F(9,UINT32,OPTIONAL,STATIC,id,FanInfo,tach_gpio,pwm_gpio,0),F(10,UINT32,OPTIONAL,STATIC,id,FanInfo,source_id,tach_gpio,0),F(11,UINT32,OPTIONAL,STATIC,id,FanInfo,curve_id,source_id,0),F(12,UINT32,OPTIONAL,STATIC,id,FanInfo,schedule_id,curve_id,0),F(13,UINT32,OPTIONAL,STATIC,id,FanInfo,group_id,schedule_id,0),F(14,UENUM,OPTIONAL,STATIC,id,FanInfo,alarm,group_id,0),L};
-static const pb_field_t ff_FanList[]={FH(1,MESSAGE,REPEATED,STATIC,fans,FanList,fans,0,&ff_FanInfo[0]),L};
+static const pb_field_t ff_FanList[]={FHR(1,MESSAGE,REPEATED,STATIC,fans,FanList,fans,0,8,&ff_FanInfo[0]),L};
 static const pb_field_t ff_FanCreate[]={F(1,UINT32,REQUIRED,STATIC,pwm_gpio,FanCreateRequest,pwm_gpio,0),F(2,UINT32,OPTIONAL,STATIC,pwm_gpio,FanCreateRequest,tach_gpio,pwm_gpio,0),F(3,STRING,REQUIRED,STATIC,pwm_gpio,FanCreateRequest,name,tach_gpio,0),L};
 static const pb_field_t ff_FanUpdate[]={F(1,UINT32,REQUIRED,STATIC,id,FanUpdateRequest,id,0),FH(2,UENUM,OPTIONAL,STATIC,id,FanUpdateRequest,mode,id,&((FanUpdateRequest*)0)->has_mode),FH(3,UINT32,OPTIONAL,STATIC,id,FanUpdateRequest,duty,mode,&((FanUpdateRequest*)0)->has_duty),FH(4,UINT32,OPTIONAL,STATIC,id,FanUpdateRequest,source_id,duty,&((FanUpdateRequest*)0)->has_source_id),FH(5,UINT32,OPTIONAL,STATIC,id,FanUpdateRequest,curve_id,source_id,&((FanUpdateRequest*)0)->has_curve_id),FH(6,UINT32,OPTIONAL,STATIC,id,FanUpdateRequest,schedule_id,curve_id,&((FanUpdateRequest*)0)->has_schedule_id),FH(7,UINT32,OPTIONAL,STATIC,id,FanUpdateRequest,group_id,schedule_id,&((FanUpdateRequest*)0)->has_group_id),FH(8,BOOL,OPTIONAL,STATIC,id,FanUpdateRequest,inverted,group_id,&((FanUpdateRequest*)0)->has_inverted),L};
 
 static const pb_field_t ff_SrcInfo[]={F(1,UINT32,REQUIRED,STATIC,id,SourceInfo,id,0),F(2,STRING,OPTIONAL,STATIC,id,SourceInfo,name,id,0),F(3,UENUM,OPTIONAL,STATIC,id,SourceInfo,type,name,0),F(4,UENUM,OPTIONAL,STATIC,id,SourceInfo,status,type,0),F(5,FLOAT,OPTIONAL,STATIC,id,SourceInfo,temp_c,status,0),F(6,UINT32,OPTIONAL,STATIC,id,SourceInfo,gpio,temp_c,0),L};
-static const pb_field_t ff_SrcList[]={FH(1,MESSAGE,REPEATED,STATIC,sources,SourceList,sources,0,&ff_SrcInfo[0]),L};
+static const pb_field_t ff_SrcList[]={FHR(1,MESSAGE,REPEATED,STATIC,sources,SourceList,sources,0,8,&ff_SrcInfo[0]),L};
 static const pb_field_t ff_SrcCreate[]={F(1,UENUM,REQUIRED,STATIC,type,SourceCreateRequest,type,0),F(2,STRING,REQUIRED,STATIC,type,SourceCreateRequest,name,type,0),F(3,UINT32,OPTIONAL,STATIC,type,SourceCreateRequest,gpio,name,0),L};
 static const pb_field_t ff_ManTemp[]={F(1,UINT32,REQUIRED,STATIC,id,ManualTempRequest,id,0),F(2,FLOAT,REQUIRED,STATIC,id,ManualTempRequest,temp_c,id,0),L};
 
 __attribute__((unused)) static const pb_field_t ff_CurvePt[]={F(1,FLOAT,OPTIONAL,STATIC,temp_c,CurvePoint,temp_c,0),F(2,UINT32,OPTIONAL,STATIC,temp_c,CurvePoint,duty,temp_c,0),L};
-static const pb_field_t ff_CurveInfo[]={F(1,UINT32,REQUIRED,STATIC,id,CurveInfo,id,0),F(2,STRING,OPTIONAL,STATIC,id,CurveInfo,name,id,0),FH(3,MESSAGE,REPEATED,STATIC,id,CurveInfo,points,name,&ff_CurvePt[0]),L};
-static const pb_field_t ff_CurveList[]={FH(1,MESSAGE,REPEATED,STATIC,curves,CurveList,curves,0,&ff_CurveInfo[0]),L};
-static const pb_field_t ff_CurveCreate[]={F(1,STRING,REQUIRED,STATIC,name,CurveCreateRequest,name,0),FH(3,MESSAGE,REPEATED,STATIC,name,CurveCreateRequest,points,name,&ff_CurvePt[0]),L};
-static const pb_field_t ff_CurveUpdate[]={F(1,UINT32,REQUIRED,STATIC,id,CurveUpdateRequest,id,0),F(2,STRING,OPTIONAL,STATIC,id,CurveUpdateRequest,name,id,0),FH(3,MESSAGE,REPEATED,STATIC,id,CurveUpdateRequest,points,name,&ff_CurvePt[0]),L};
+static const pb_field_t ff_CurveInfo[]={F(1,UINT32,REQUIRED,STATIC,id,CurveInfo,id,0),F(2,STRING,OPTIONAL,STATIC,id,CurveInfo,name,id,0),FHR(3,MESSAGE,REPEATED,STATIC,id,CurveInfo,points,name,10,&ff_CurvePt[0]),L};
+static const pb_field_t ff_CurveList[]={FHR(1,MESSAGE,REPEATED,STATIC,curves,CurveList,curves,0,16,&ff_CurveInfo[0]),L};
+static const pb_field_t ff_CurveCreate[]={F(1,STRING,REQUIRED,STATIC,name,CurveCreateRequest,name,0),FHR(3,MESSAGE,REPEATED,STATIC,name,CurveCreateRequest,points,name,10,&ff_CurvePt[0]),L};
+static const pb_field_t ff_CurveUpdate[]={F(1,UINT32,REQUIRED,STATIC,id,CurveUpdateRequest,id,0),F(2,STRING,OPTIONAL,STATIC,id,CurveUpdateRequest,name,id,0),FHR(3,MESSAGE,REPEATED,STATIC,id,CurveUpdateRequest,points,name,10,&ff_CurvePt[0]),L};
 
 static const pb_field_t ff_SchedInfo[]={F(1,UINT32,REQUIRED,STATIC,id,ScheduleInfo,id,0),F(2,UINT32,OPTIONAL,STATIC,id,ScheduleInfo,fan_id,id,0),F(3,UINT32,OPTIONAL,STATIC,id,ScheduleInfo,duty,fan_id,0),F(4,UINT32,OPTIONAL,STATIC,id,ScheduleInfo,start_min,duty,0),F(5,UINT32,OPTIONAL,STATIC,id,ScheduleInfo,end_min,start_min,0),F(6,BOOL,OPTIONAL,STATIC,id,ScheduleInfo,enabled,end_min,0),L};
-static const pb_field_t ff_SchedList[]={FH(1,MESSAGE,REPEATED,STATIC,schedules,ScheduleList,schedules,0,&ff_SchedInfo[0]),L};
+static const pb_field_t ff_SchedList[]={FHR(1,MESSAGE,REPEATED,STATIC,schedules,ScheduleList,schedules,0,8,&ff_SchedInfo[0]),L};
 static const pb_field_t ff_SchedCreate[]={F(1,UINT32,REQUIRED,STATIC,fan_id,ScheduleCreateRequest,fan_id,0),F(2,UINT32,REQUIRED,STATIC,fan_id,ScheduleCreateRequest,duty,fan_id,0),F(3,UINT32,REQUIRED,STATIC,fan_id,ScheduleCreateRequest,start_min,duty,0),F(4,UINT32,REQUIRED,STATIC,fan_id,ScheduleCreateRequest,end_min,start_min,0),F(5,BOOL,OPTIONAL,STATIC,fan_id,ScheduleCreateRequest,enabled,end_min,0),L};
 static const pb_field_t ff_SchedUpdate[]={F(1,UINT32,REQUIRED,STATIC,id,ScheduleUpdateRequest,id,0),F(2,UINT32,OPTIONAL,STATIC,id,ScheduleUpdateRequest,fan_id,id,0),F(3,UINT32,OPTIONAL,STATIC,id,ScheduleUpdateRequest,duty,fan_id,0),F(4,UINT32,OPTIONAL,STATIC,id,ScheduleUpdateRequest,start_min,duty,0),F(5,UINT32,OPTIONAL,STATIC,id,ScheduleUpdateRequest,end_min,start_min,0),F(6,BOOL,OPTIONAL,STATIC,id,ScheduleUpdateRequest,enabled,end_min,0),L};
 
 __attribute__((unused)) static const pb_field_t ff_WifiAp[]={F(1,STRING,OPTIONAL,STATIC,ssid,WifiApRecord,ssid,0),F(2,SINT32,OPTIONAL,STATIC,ssid,WifiApRecord,rssi,ssid,0),F(3,UINT32,OPTIONAL,STATIC,ssid,WifiApRecord,channel,rssi,0),F(4,UINT32,OPTIONAL,STATIC,ssid,WifiApRecord,authmode,channel,0),L};
-static const pb_field_t ff_WifiScan[]={FH(1,MESSAGE,REPEATED,STATIC,aps,WifiScanResult,aps,0,&ff_WifiAp[0]),L};
+static const pb_field_t ff_WifiScan[]={FHR(1,MESSAGE,REPEATED,STATIC,aps,WifiScanResult,aps,0,16,&ff_WifiAp[0]),L};
 static const pb_field_t ff_WifiConn[]={F(1,STRING,REQUIRED,STATIC,ssid,WifiConnectRequest,ssid,0),F(2,STRING,REQUIRED,STATIC,ssid,WifiConnectRequest,password,ssid,0),L};
 static const pb_field_t ff_WifiStatus[]={F(1,BOOL,OPTIONAL,STATIC,sta_connected,WifiStatus,sta_connected,0),F(2,STRING,OPTIONAL,STATIC,sta_connected,WifiStatus,sta_ip,sta_connected,0),F(3,STRING,OPTIONAL,STATIC,sta_connected,WifiStatus,ap_ip,sta_ip,0),L};
 static const pb_field_t ff_SysInfo[]={F(1,STRING,OPTIONAL,STATIC,version,SystemInfo,version,0),F(2,UINT32,OPTIONAL,STATIC,version,SystemInfo,uptime_s,version,0),F(3,UINT32,OPTIONAL,STATIC,version,SystemInfo,heap_free,uptime_s,0),F(4,UINT32,OPTIONAL,STATIC,version,SystemInfo,fan_count,heap_free,0),F(5,UINT32,OPTIONAL,STATIC,version,SystemInfo,source_count,fan_count,0),F(6,UINT32,OPTIONAL,STATIC,version,SystemInfo,curve_count,source_count,0),F(7,UINT32,OPTIONAL,STATIC,version,SystemInfo,schedule_count,curve_count,0),L};
