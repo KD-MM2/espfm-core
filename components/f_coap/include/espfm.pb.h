@@ -19,7 +19,7 @@ typedef struct { float temp_c; uint32_t duty; } CurvePoint;
 #define CurvePoint_init_default {0.0f,0}
 #define CurvePoint_init_zero     {0.0f,0}
 
-typedef struct {
+typedef struct _FanInfo {
     uint32_t id; char name[16]; FanMode mode; uint32_t duty; uint32_t rpm;
     bool enabled, inverted; uint32_t pwm_gpio, tach_gpio;
     uint32_t source_id, curve_id, schedule_id, group_id; FanAlarm alarm;
