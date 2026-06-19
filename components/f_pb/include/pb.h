@@ -132,7 +132,7 @@ bool pb_decode(pb_istream_t *s, const pb_field_t f[], void *dest) {
         pb_byte_t *p=((pb_byte_t*)dest)+fd->data_offset;
         if(wt==0){uint64_t v;pb_decode_varint(s,&v);if(fd->type==1){int64_t sv=(int64_t)(v>>1);if(v&1)sv=~sv;memcpy(p,&sv,fd->data_size<=4?fd->data_size:4);}else memcpy(p,&v,fd->data_size<=4?fd->data_size:4);}
         else if(wt==5)pb_read(s,p,4);
-        else if(wt==2){uint64_t len;if(!pb_decode_varint(s,&len)||len>s->bytes_left)return false;if(fd->type==4){size_t l=len;if(l>fd->data_size-1)l=fd->data_size-1;pb_read(s,p,l);p[l]=0;}else if(fd->type==5){pb_istream_t sub={0};sub.bytes_left=len;sub.state=s->state;pb_decode(&sub,(const pb_field_t*)fd->ptr,(void*)p);s->state=sub.state;s->bytes_left-=len;}}
+        else if(wt==2){uint64_t len;if(!pb_decode_varint(s,&len)||len>s->bytes_left)return false;if(fd->type==4){size_t l=len;if(l>fd->data_size-1)l=fd->data_size-1;pb_read(s,p,l);p[l]=0;}else if(fd->type==5){pb_byte_t *tgt=p;if(fd->htype==PB_HTYPE_REPEATED){pb_size_t *c=(pb_size_t*)(((pb_byte_t*)dest)+fd->size_offset);tgt=p+(*c)*fd->data_size;}pb_istream_t sub={0};sub.bytes_left=len;sub.state=s->state;pb_decode(&sub,(const pb_field_t*)fd->ptr,(void*)tgt);s->state=sub.state;s->bytes_left-=len;}}
         if(fd->htype==PB_HTYPE_REPEATED){pb_size_t *c=(pb_size_t*)(((pb_byte_t*)dest)+fd->size_offset);(*c)++;}
         if(fd->htype==PB_HTYPE_OPTIONAL&&fd->ptr){*(bool*)(((pb_byte_t*)dest)+(uintptr_t)fd->ptr)=true;}
     }
