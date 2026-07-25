@@ -6,11 +6,21 @@ FanCreateRequest.name     max_size:16
 SourceCreateRequest.name  max_size:16
 CurveCreateRequest.name   max_size:16
 CurveUpdateRequest.name   max_size:16
+WifiConnectRequest.ssid      max_size:33
+WifiConnectRequest.password  max_size:64
+StatusResponse.error_msg     max_size:64
+WifiApRecord.ssid            max_size:33
+WifiStatus.sta_ip            max_size:16
+WifiStatus.ap_ip             max_size:16
+SystemInfo.version           max_size:12
+ConfigFile.version           max_size:8
 
 # Repeated message fields: capped inline arrays
 FanList.fans              max_count:8
 SourceList.sources        max_count:8
 CurveInfo.points          max_count:10
+CurveCreateRequest.points max_count:10
+CurveUpdateRequest.points max_count:10
 CurveList.curves          max_count:16
 ScheduleList.schedules    max_count:8
 WifiScanResult.aps        max_count:16
