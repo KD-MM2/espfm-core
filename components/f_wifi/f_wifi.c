@@ -25,6 +25,8 @@ struct f_wifi {
     char ip_str[16];
     int retry_count;
     TimerHandle_t ap_stop_timer;
+    esp_event_handler_instance_t instance_any_id;
+    esp_event_handler_instance_t instance_got_ip;
 };
 
 /* Deferred AP stop — called from timer context (safe to call WiFi APIs) */
@@ -118,7 +120,10 @@ esp_err_t f_wifi_init(f_wifi_handle_t *handle) {
     wifi->ap_stop_timer = xTimerCreate("ap_stop", pdMS_TO_TICKS(2000),
                                         pdFALSE, wifi, _ap_stop_timer_cb);
 
-    ESP_ERROR_CHECK(esp_netif_init());
+    esp_err_t netif_err = esp_netif_init();
+    if (netif_err != ESP_OK && netif_err != ESP_ERR_INVALID_STATE) {
+        ESP_ERROR_CHECK(netif_err);
+    }
     esp_netif_create_default_wifi_sta();
     esp_netif_create_default_wifi_ap();
 
@@ -140,23 +145,23 @@ esp_err_t f_wifi_init(f_wifi_handle_t *handle) {
         ESP_LOGI(TAG, "WiFi STA using saved config: %s", sta_config.sta.ssid);
     }
 
-    esp_event_handler_instance_t instance_any_id;
-    esp_event_handler_instance_t instance_got_ip;
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
-        WIFI_EVENT, ESP_EVENT_ANY_ID, &_event_handler, wifi, &instance_any_id));
+        WIFI_EVENT, ESP_EVENT_ANY_ID, &_event_handler, wifi, &wifi->instance_any_id));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
-        IP_EVENT, IP_EVENT_STA_GOT_IP, &_event_handler, wifi, &instance_got_ip));
+        IP_EVENT, IP_EVENT_STA_GOT_IP, &_event_handler, wifi, &wifi->instance_got_ip));
 
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
 
     wifi_config_t ap_config = {
         .ap = {
-            .password = "",
             .max_connection = 4,
-            .authmode = WIFI_AUTH_OPEN,
+            .authmode = WIFI_AUTH_WPA2_PSK,
         },
     };
+    strncpy((char *)ap_config.ap.password, CONFIG_ESPFM_AP_PASSWORD,
+            sizeof(ap_config.ap.password) - 1);
+    ESP_LOGI(TAG, "AP password set from Kconfig (WPA2-PSK)");
     snprintf((char *)ap_config.ap.ssid, sizeof(ap_config.ap.ssid),
              "ESPFM-%02X%02X", mac[4], mac[5]);
 
@@ -165,7 +170,7 @@ esp_err_t f_wifi_init(f_wifi_handle_t *handle) {
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "WiFi APSTA mode — STA:'%s'  AP:'%s'",
+    ESP_LOGI(TAG, "WiFi APSTA mode — STA:'%s'  AP:'%s' (WPA2-PSK)",
              CONFIG_ESPFM_WIFI_SSID, ap_config.ap.ssid);
     *handle = wifi;
     return ESP_OK;

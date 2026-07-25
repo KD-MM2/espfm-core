@@ -5,6 +5,9 @@ menu "ESPFanManager Configuration"
     config ESPFM_WIFI_PASSWORD
         string "WiFi Password"
         default "mypassword"
+    config ESPFM_AP_PASSWORD
+        string "WiFi AP password (min 8 chars for WPA2)"
+        default "espfm123"
     config ESPFM_WIFI_MAX_RETRY
         int "Maximum WiFi retry attempts"
         default 5
@@ -13,4 +16,8 @@ menu "ESPFanManager Configuration"
         int "Over-temperature alarm threshold (deg C)"
         default 85
         range 50 150
+    config ESPFM_CONTROL_PERIOD_MS
+        int "Control loop period (ms)"
+        default 1000
+        range 100 10000
 endmenu
