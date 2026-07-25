@@ -27,7 +27,7 @@ After boot, the device starts in AP+STA mode. If STA fails, it falls back to ope
 - **Schedules** — time-of-day duty overrides with overnight wrap (up to 8 rules)
 - **WiFi AP+STA** — open AP fallback when STA fails, scan & connect from dashboard
 - **REST API** — full CRUD for fans, sources, curves, schedules (22 endpoints)
-- **Persistent config** — LittleFS-backed `config.json` auto-saved on every change
+- **Persistent config** — LittleFS-backed `config.pb` (Protobuf) auto-saved on every change
 - **Dashboard SPA** — single-file HTML served from flash, 5 tabs, real-time polling
 
 ---
@@ -78,7 +78,7 @@ Constraints enforced by `f_constraints`: GPIO 0-48, duty 0-100%, mode 0-1, temp 
 |  f_control   1 Hz loop: src -> curve|
 |              -> hysteresis -> ramp  |
 |              -> duty + diagnostics  |
-|  f_config    LittleFS persistence   |
+|  f_config    LittleFS (Protobuf)    |
 |  f_constr    Input validation       |
 +-- Presentation ---------------------+
 |  f_http      REST API + static file |
@@ -240,46 +240,10 @@ Schedules use **minutes since midnight** (0-1439). Example: `start_min: 480` = 0
 | `ESPFM_WIFI_MAX_RETRY` | 5 | Max STA connection attempts |
 | `ESPFM_OVERTEMP_THRESHOLD_C` | 85 | Over-temp alarm trigger |
 
-### config.json Schema (LittleFS)
+### config.pb Schema (LittleFS, Protobuf)
 
-Saved to `/littlefs/config.json` on every API mutation (3-second debounced). Loaded automatically at boot.
-
-```json
-{
-  "v": "2.0",
-  "fans": [{
-    "id": 0, "n": "f1", "m": 0, "d": 20, "e": true, "inv": false,
-    "pg": 13, "tg": 12, "sid": 255, "cid": 255, "scid": 255, "gid": 0
-  }],
-  "sources": [{ "id": 0, "n": "s1", "t": 0, "gp": 255 }],
-  "curves": [{ "id": 0, "n": "c1", "np": 3,
-    "pts": [{"tc": 30, "dty": 20}, {"tc": 50, "dty": 50}, {"tc": 70, "dty": 100}]
-  }],
-  "schedules": [{ "id": 0, "fid": 0, "d": 50, "sm": 480, "em": 1080, "e": true }]
-}
-```
-
-Keys are abbreviated to reduce flash wear. Field reference:
-
-| Key | Full name | Range |
-|-----|-----------|-------|
-| `n` | name | string, max 15 chars |
-| `m` | mode | 0=manual, 1=AUTO |
-| `d` | duty | 0-100% |
-| `e` | enabled | bool |
-| `inv` | inverted | bool (PWM polarity) |
-| `pg` | pwm_gpio | GPIO 0-48 |
-| `tg` | tach_gpio | GPIO 0-48 or 255=none |
-| `sid` | source_id | 0-7 or 255=none |
-| `cid` | curve_id | 0-15 or 255=none |
-| `scid` | schedule_id | 0-7 or 255=none |
-| `gid` | group_id | 0=none, 1-254=group |
-| `gp` | gpio | GPIO 0-48 or 255=none |
-| `sm` | start_min | 0-1439 |
-| `em` | end_min | 0-1439 |
-| `np` | num_points | 2-10 |
-| `tc` | temp_c | float (Celsius) |
-| `dty` | duty | 0-100% |
+Saved to `/littlefs/config.pb` on every API mutation (3-second debounced). Loaded automatically at boot.
+Uses the `ConfigFile` Protobuf message (v3.0 format) — see `components/f_schema/proto/espfm.proto`.
 
 ---
 
