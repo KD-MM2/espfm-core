@@ -27,6 +27,7 @@ esp_err_t f_schedule_add(f_schedule_handle_t handle, const f_schedule_info_t *in
 esp_err_t f_schedule_remove(f_schedule_handle_t handle, uint8_t id);
 esp_err_t f_schedule_update(f_schedule_handle_t handle, uint8_t id, const f_schedule_info_t *info);
 esp_err_t f_schedule_start(f_schedule_handle_t handle);
+esp_err_t f_schedule_stop(f_schedule_handle_t handle);
 uint8_t f_schedule_get_count(f_schedule_handle_t handle);
 esp_err_t f_schedule_get_info(f_schedule_handle_t handle, uint8_t id, f_schedule_info_t *info_out);
 

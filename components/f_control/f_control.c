@@ -8,7 +8,7 @@
 
 static const char *TAG = "f_control";
 
-#define CONTROL_PERIOD_MS  1000
+#define CONTROL_PERIOD_MS  CONFIG_ESPFM_CONTROL_PERIOD_MS
 #define CONTROL_PRIORITY    3
 #define CONTROL_STACK       4096
 #define DEFAULT_HYSTERESIS  3
@@ -21,7 +21,7 @@ struct f_control {
     f_source_handle_t source;
     f_curve_handle_t curve;
     TaskHandle_t task;
-    bool running;
+    volatile bool running;
     uint8_t hysteresis_pct;
     uint8_t ramp_up_pct;
     uint8_t ramp_down_pct;

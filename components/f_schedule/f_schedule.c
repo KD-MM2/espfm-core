@@ -19,6 +19,11 @@ struct f_schedule {
     bool last_active[F_SCHEDULE_MAX_COUNT];
 };
 
+/* Timer callback — runs on the FreeRTOS timer service task.
+ * CAUTION: the timer service task has a limited default stack (configTIMER_TASK_STACK_DEPTH,
+ * typically 4096 bytes on ESP-IDF). This callback must NOT perform deep recursion,
+ * large stack allocations, or blocking I/O. Current work is safe: struct timeval,
+ * a uint16_t, and a short loop with light f_fan_set_duty calls. */
 static void _sched_timer_cb(TimerHandle_t timer) {
     f_schedule_handle_t sched = (f_schedule_handle_t)pvTimerGetTimerID(timer);
     struct timeval tv;
@@ -40,7 +45,11 @@ static void _sched_timer_cb(TimerHandle_t timer) {
         }
 
         if (in_window && !sched->last_active[i]) {
-            f_fan_set_duty(sched->fan, r->fan_id, r->duty);
+            esp_err_t err = f_fan_set_duty(sched->fan, r->fan_id, r->duty);
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "Schedule %d: failed to set duty on fan %d: %s",
+                         r->id, r->fan_id, esp_err_to_name(err));
+            }
             sched->last_active[i] = true;
             ESP_LOGD(TAG, "Schedule %d active: fan %d duty %d%%", r->id, r->fan_id, r->duty);
         } else if (!in_window && sched->last_active[i]) {
@@ -67,6 +76,8 @@ esp_err_t f_schedule_init(f_schedule_handle_t *handle, f_fan_handle_t fan) {
 
 esp_err_t f_schedule_add(f_schedule_handle_t handle, const f_schedule_info_t *info, uint8_t *id_out) {
     if (handle == NULL || info == NULL || id_out == NULL) return ESP_ERR_INVALID_ARG;
+    f_fan_info_t tmp;
+    if (f_fan_get_info(handle->fan, info->fan_id, &tmp) != ESP_OK) return ESP_ERR_INVALID_ARG;
     int slot = -1;
     for (int i = 0; i < F_SCHEDULE_MAX_COUNT; i++) {
         if (!handle->slot_used[i]) { slot = i; break; }
@@ -89,6 +100,10 @@ esp_err_t f_schedule_remove(f_schedule_handle_t handle, uint8_t id) {
     memset(&handle->rules[id], 0, sizeof(f_schedule_info_t));
     handle->slot_used[id] = false;
     handle->count--;
+    if (handle->count == 0) {
+        xTimerStop(handle->timer, 0);
+        ESP_LOGI(TAG, "Schedule timer stopped (no remaining schedules)");
+    }
     return ESP_OK;
 }
 
@@ -97,6 +112,8 @@ esp_err_t f_schedule_update(f_schedule_handle_t handle, uint8_t id,
     if (handle == NULL || info == NULL || id >= F_SCHEDULE_MAX_COUNT)
         return ESP_ERR_INVALID_ARG;
     if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
+    f_fan_info_t tmp;
+    if (f_fan_get_info(handle->fan, info->fan_id, &tmp) != ESP_OK) return ESP_ERR_INVALID_ARG;
 
     handle->rules[id].fan_id    = info->fan_id;
     handle->rules[id].duty      = info->duty;
@@ -110,6 +127,13 @@ esp_err_t f_schedule_start(f_schedule_handle_t handle) {
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
     xTimerStart(handle->timer, 0);
     ESP_LOGI(TAG, "Schedule timer started");
+    return ESP_OK;
+}
+
+esp_err_t f_schedule_stop(f_schedule_handle_t handle) {
+    if (handle == NULL) return ESP_ERR_INVALID_ARG;
+    xTimerStop(handle->timer, 0);
+    ESP_LOGI(TAG, "Schedule timer stopped");
     return ESP_OK;
 }
 
