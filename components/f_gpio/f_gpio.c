@@ -77,6 +77,7 @@ bool f_gpio_is_claimed_for(f_gpio_handle_t handle, uint8_t pin, uint32_t cap_mas
 }
 
 uint8_t f_gpio_get_count(f_gpio_handle_t handle) {
+    if (handle == NULL) return 0;
     return F_GPIO_MAX_PINS;
 }
 

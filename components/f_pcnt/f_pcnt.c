@@ -81,7 +81,7 @@ esp_err_t f_pcnt_compute_rpm(int pulse_count, uint32_t interval_ms,
     if (pulses_per_rev == 0 || rpm_out == NULL) return ESP_ERR_INVALID_ARG;
     if (pulse_count <= 0) { *rpm_out = 0; return ESP_OK; }
     /* RPM = (pulses / pulses_per_rev) * (60000 / interval_ms) */
-    *rpm_out = (uint16_t)(((uint32_t)pulse_count * 60000UL) /
+    *rpm_out = (uint16_t)(((uint64_t)pulse_count * 60000UL) /
                           ((uint32_t)pulses_per_rev * interval_ms));
     return ESP_OK;
 }

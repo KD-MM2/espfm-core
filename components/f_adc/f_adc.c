@@ -29,19 +29,13 @@ esp_err_t f_adc_init(f_adc_handle_t *handle) {
 esp_err_t f_adc_read_raw(f_adc_handle_t handle, uint8_t gpio, int *raw_out) {
     if (handle == NULL || raw_out == NULL) return ESP_ERR_INVALID_ARG;
 
+    adc_unit_t unit;
     adc_channel_t channel;
-    switch (gpio) {
-        case 1:  channel = ADC_CHANNEL_0; break;
-        case 2:  channel = ADC_CHANNEL_1; break;
-        case 3:  channel = ADC_CHANNEL_2; break;
-        case 4:  channel = ADC_CHANNEL_3; break;
-        case 5:  channel = ADC_CHANNEL_4; break;
-        case 6:  channel = ADC_CHANNEL_5; break;
-        case 7:  channel = ADC_CHANNEL_6; break;
-        case 8:  channel = ADC_CHANNEL_7; break;
-        case 9:  channel = ADC_CHANNEL_8; break;
-        case 10: channel = ADC_CHANNEL_9; break;
-        default: return ESP_ERR_INVALID_ARG;
+    if (adc_oneshot_io_to_channel((int)gpio, &unit, &channel) != ESP_OK) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (unit != ADC_UNIT_1) {
+        return ESP_ERR_INVALID_ARG;
     }
 
     adc_oneshot_chan_cfg_t chan_cfg = {
