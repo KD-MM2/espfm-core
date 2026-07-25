@@ -1,6 +1,8 @@
 #include "f_source.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -24,6 +26,7 @@ struct f_source {
     bool slot_used[F_SOURCE_MAX_COUNT];
     uint8_t count;
     uint8_t ds18b20_count;
+    SemaphoreHandle_t mutex;
 };
 
 esp_err_t f_source_init(f_source_handle_t *handle, f_adc_handle_t adc,
@@ -34,6 +37,11 @@ esp_err_t f_source_init(f_source_handle_t *handle, f_adc_handle_t adc,
     h->adc = adc;
     h->ds18b20 = ds18b20;
     if (h->ds18b20) f_ds18b20_scan(h->ds18b20, &h->ds18b20_count);
+    h->mutex = xSemaphoreCreateRecursiveMutex();
+    if (h->mutex == NULL) {
+        free(h);
+        return ESP_ERR_NO_MEM;
+    }
     *handle = h;
     ESP_LOGI(TAG, "Source registry initialized (max %d, DS18B20: %d)",
              F_SOURCE_MAX_COUNT, h->ds18b20_count);
@@ -44,11 +52,14 @@ esp_err_t f_source_add(f_source_handle_t handle, source_type_t type, uint8_t gpi
                        const char *name, uint8_t *id_out) {
     if (handle == NULL || name == NULL || id_out == NULL) return ESP_ERR_INVALID_ARG;
 
+    esp_err_t ret = ESP_OK;
+    xSemaphoreTakeRecursive(handle->mutex, portMAX_DELAY);
+
     int slot = -1;
     for (int i = 0; i < F_SOURCE_MAX_COUNT; i++) {
         if (!handle->slot_used[i]) { slot = i; break; }
     }
-    if (slot < 0) return ESP_ERR_NO_MEM;
+    if (slot < 0) { ret = ESP_ERR_NO_MEM; goto cleanup; }
 
     f_source_info_t *s = &handle->sources[slot];
     s->id = (uint8_t)slot;
@@ -58,7 +69,14 @@ esp_err_t f_source_add(f_source_handle_t handle, source_type_t type, uint8_t gpi
     s->status = SOURCE_STATUS_INVALID;
     s->temp_c = 0.0f;
     s->gpio = gpio;
+    s->ds18b20_index = 0;
     s->last_update_us = 0;
+
+    if (type == SOURCE_TYPE_DS18B20) {
+        /* For DS18B20, gpio parameter carries the device index from scan */
+        s->ds18b20_index = gpio;
+        s->gpio = F_SOURCE_GPIO_NONE;
+    }
 
     /* For manual-type sources, mark as valid immediately */
     if (type == SOURCE_TYPE_MANUAL) {
@@ -69,22 +87,36 @@ esp_err_t f_source_add(f_source_handle_t handle, source_type_t type, uint8_t gpi
     handle->count++;
     *id_out = (uint8_t)slot;
     ESP_LOGI(TAG, "Source %d added: '%s' type=%d GPIO=%d", slot, s->name, type, gpio);
-    return ESP_OK;
+
+cleanup:
+    xSemaphoreGiveRecursive(handle->mutex);
+    return ret;
 }
 
 esp_err_t f_source_remove(f_source_handle_t handle, uint8_t id) {
     if (handle == NULL || id >= F_SOURCE_MAX_COUNT) return ESP_ERR_INVALID_ARG;
-    if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
+
+    esp_err_t ret = ESP_OK;
+    xSemaphoreTakeRecursive(handle->mutex, portMAX_DELAY);
+
+    if (!handle->slot_used[id]) { ret = ESP_ERR_NOT_FOUND; goto cleanup; }
     memset(&handle->sources[id], 0, sizeof(f_source_info_t));
     handle->slot_used[id] = false;
     handle->count--;
-    return ESP_OK;
+
+cleanup:
+    xSemaphoreGiveRecursive(handle->mutex);
+    return ret;
 }
 
 esp_err_t f_source_get_reading(f_source_handle_t handle, uint8_t id,
                                 float *temp_c_out, source_status_t *status_out) {
     if (handle == NULL || id >= F_SOURCE_MAX_COUNT) return ESP_ERR_INVALID_ARG;
-    if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
+
+    esp_err_t ret = ESP_OK;
+    xSemaphoreTakeRecursive(handle->mutex, portMAX_DELAY);
+
+    if (!handle->slot_used[id]) { ret = ESP_ERR_NOT_FOUND; goto cleanup; }
 
     f_source_info_t *s = &handle->sources[id];
 
@@ -96,7 +128,8 @@ esp_err_t f_source_get_reading(f_source_handle_t handle, uint8_t id,
             s->status = SOURCE_STATUS_INVALID;
             if (temp_c_out) *temp_c_out = s->temp_c;
             if (status_out) *status_out = s->status;
-            return err;
+            ret = err;
+            goto cleanup;
         }
         float voltage;
         f_adc_raw_to_voltage(raw, NTC_VREF_MV, &voltage);
@@ -104,7 +137,7 @@ esp_err_t f_source_get_reading(f_source_handle_t handle, uint8_t id,
         s->last_update_us = esp_timer_get_time();
         s->status = SOURCE_STATUS_VALID;
     } else if (s->type == SOURCE_TYPE_DS18B20 && handle->ds18b20) {
-        esp_err_t err = f_ds18b20_read_temp(handle->ds18b20, s->gpio, &s->temp_c);
+        esp_err_t err = f_ds18b20_read_temp(handle->ds18b20, s->ds18b20_index, &s->temp_c);
         if (err != ESP_OK) {
             s->status = SOURCE_STATUS_INVALID;
         } else {
@@ -122,38 +155,62 @@ esp_err_t f_source_get_reading(f_source_handle_t handle, uint8_t id,
 
     if (temp_c_out) *temp_c_out = s->temp_c;
     if (status_out) *status_out = s->status;
-    return ESP_OK;
+
+cleanup:
+    xSemaphoreGiveRecursive(handle->mutex);
+    return ret;
 }
 
 esp_err_t f_source_update_manual(f_source_handle_t handle, uint8_t id, float temp_c) {
     if (handle == NULL || id >= F_SOURCE_MAX_COUNT) return ESP_ERR_INVALID_ARG;
-    if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
-    if (handle->sources[id].type != SOURCE_TYPE_MANUAL) return ESP_ERR_INVALID_ARG;
+
+    esp_err_t ret = ESP_OK;
+    xSemaphoreTakeRecursive(handle->mutex, portMAX_DELAY);
+
+    if (!handle->slot_used[id]) { ret = ESP_ERR_NOT_FOUND; goto cleanup; }
+    if (handle->sources[id].type != SOURCE_TYPE_MANUAL) { ret = ESP_ERR_INVALID_ARG; goto cleanup; }
 
     handle->sources[id].temp_c = temp_c;
     handle->sources[id].last_update_us = esp_timer_get_time();
     handle->sources[id].status = SOURCE_STATUS_VALID;
-    return ESP_OK;
+
+cleanup:
+    xSemaphoreGiveRecursive(handle->mutex);
+    return ret;
 }
 
 uint8_t f_source_get_count(f_source_handle_t handle) {
-    return handle ? handle->count : 0;
+    if (handle == NULL) return 0;
+    xSemaphoreTakeRecursive(handle->mutex, portMAX_DELAY);
+    uint8_t count = handle->count;
+    xSemaphoreGiveRecursive(handle->mutex);
+    return count;
 }
 
 esp_err_t f_source_get_info(f_source_handle_t handle, uint8_t id,
                              f_source_info_t *info_out) {
     if (handle == NULL || id >= F_SOURCE_MAX_COUNT || info_out == NULL)
         return ESP_ERR_INVALID_ARG;
-    if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
+
+    esp_err_t ret = ESP_OK;
+    xSemaphoreTakeRecursive(handle->mutex, portMAX_DELAY);
+
+    if (!handle->slot_used[id]) { ret = ESP_ERR_NOT_FOUND; goto cleanup; }
     memcpy(info_out, &handle->sources[id], sizeof(f_source_info_t));
-    return ESP_OK;
+
+cleanup:
+    xSemaphoreGiveRecursive(handle->mutex);
+    return ret;
 }
 
 esp_err_t f_source_for_each(f_source_handle_t handle,
                              void (*cb)(const f_source_info_t *, void *), void *ctx) {
     if (handle == NULL || cb == NULL) return ESP_ERR_INVALID_ARG;
+
+    xSemaphoreTakeRecursive(handle->mutex, portMAX_DELAY);
     for (int i = 0; i < F_SOURCE_MAX_COUNT; i++) {
         if (handle->slot_used[i]) cb(&handle->sources[i], ctx);
     }
+    xSemaphoreGiveRecursive(handle->mutex);
     return ESP_OK;
 }

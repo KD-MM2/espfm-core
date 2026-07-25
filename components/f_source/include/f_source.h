@@ -19,6 +19,7 @@ typedef struct {
     source_status_t status;
     float     temp_c;
     uint8_t   gpio;
+    uint8_t   ds18b20_index;  /* device index from scan (for SOURCE_TYPE_DS18B20) */
     int64_t   last_update_us;
 } f_source_info_t;
 
