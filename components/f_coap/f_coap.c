@@ -6,11 +6,13 @@
 #include "esp_event.h"
 #include "esp_wifi.h"
 #include "lwip/sockets.h"
+#include "lwip/inet.h"
 #include "coap.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 
 static const char *TAG = "f_coap";
 #define COAP_TASK_STACK 8192
@@ -30,20 +32,42 @@ static void coap_task(void *arg)
         socklen_t from_len = sizeof(from);
         int n = recvfrom(h->sock, rx, COAP_MTU, 0,
                         (struct sockaddr *)&from, &from_len);
+        if (n < 0) {
+            ESP_LOGW(TAG, "recvfrom error: errno=%d", errno);
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
         if (n < 4) {
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
+        ESP_LOGI(TAG, "Received %d bytes from %s:%d", n,
+                 inet_ntoa(from.sin_addr), ntohs(from.sin_port));
 
         coap_packet_t inpkt, outpkt;
-        if (coap_parse(&inpkt, rx, n) != 0) continue;
+        if (coap_parse(&inpkt, rx, n) != 0) {
+            ESP_LOGW(TAG, "coap_parse failed (%d bytes)", n);
+            continue;
+        }
 
         size_t out_len = COAP_MTU;
         f_coap_dispatch(h, &inpkt, tx, &out_len, &outpkt);
+        ESP_LOGI(TAG, "dispatch done: out_len=%d code=0x%02x",
+                 (int)out_len, outpkt.hdr.code);
 
+        out_len = COAP_MTU;  /* reset to buffer capacity for coap_build */
         if (coap_build(tx, &out_len, &outpkt) == 0) {
-            sendto(h->sock, tx, out_len, 0,
-                   (struct sockaddr *)&from, from_len);
+            ESP_LOGI(TAG, "Sending %d bytes to %s:%d",
+                     (int)out_len, inet_ntoa(from.sin_addr),
+                     ntohs(from.sin_port));
+            int sret = sendto(h->sock, tx, out_len, 0,
+                              (struct sockaddr *)&from, from_len);
+            if (sret < 0)
+                ESP_LOGW(TAG, "sendto failed: errno=%d", errno);
+            else
+                ESP_LOGI(TAG, "sendto OK (%d bytes)", sret);
+        } else {
+            ESP_LOGW(TAG, "coap_build failed");
         }
     }
     h->task = NULL;
@@ -63,6 +87,16 @@ static void on_wifi_disconnected(void *arg, esp_event_base_t base,
 {
     struct f_coap *h = (struct f_coap *)arg;
     if (h) f_coap_stop(h);
+}
+
+static void on_ap_stop(void *arg, esp_event_base_t base,
+                       int32_t id, void *data)
+{
+    struct f_coap *h = (struct f_coap *)arg;
+    if (!h) return;
+    ESP_LOGI(TAG, "AP stopped, restarting CoAP server on STA interface");
+    f_coap_stop(h);
+    f_coap_start(h);
 }
 
 /* ---- Public API ---- */
@@ -87,6 +121,8 @@ esp_err_t f_coap_init(f_coap_handle_t *handle, f_fan_handle_t fan,
                                on_wifi_connected, h);
     esp_event_handler_register(ESPFM_EVENT, ESPFM_EVENT_WIFI_DISCONNECTED,
                                on_wifi_disconnected, h);
+    esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_AP_STOP,
+                               on_ap_stop, h);
 
     *handle = h;
     ESP_LOGI(TAG, "CoAP initialized");

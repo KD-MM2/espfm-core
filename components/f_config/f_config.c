@@ -243,11 +243,17 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan,
     if (cfg->has_sources) {
         for (pb_size_t i = 0; i < cfg->sources.sources_count; i++) {
             SourceInfo *pb = &cfg->sources.sources[i];
-            if (f_constraints_gpio((int)pb->gpio, NULL) != ESP_OK) continue;
+            /* Manual sources use gpio=255 (GPIO_NONE), skip GPIO validation */
+            if (pb_to_source_type(pb->type) != SOURCE_TYPE_MANUAL &&
+                f_constraints_gpio((int)pb->gpio, NULL) != ESP_OK) continue;
             uint8_t new_id;
             if (f_source_add(source, pb_to_source_type(pb->type),
-                             (uint8_t)pb->gpio, pb->name, &new_id) == ESP_OK)
+                             (uint8_t)pb->gpio, pb->name, &new_id) == ESP_OK) {
                 src_count++;
+                /* Restore manual temperature from saved config */
+                if (pb_to_source_type(pb->type) == SOURCE_TYPE_MANUAL && pb->temp_c != 0.0f)
+                    f_source_update_manual(source, new_id, pb->temp_c);
+            }
         }
     }
 
