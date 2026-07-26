@@ -1,0 +1,1 @@
+& 'C:\Espressif\tools\Microsoft.v6.0.1.PowerShell_profile.ps1'; python C:/Espressif/tools/python/v6.0.1/venv/Lib/site-packages/nanopb/generator/nanopb_generator.py -I components/f_schema/proto -I components/f_schema -D components/f_schema/ components/f_schema/proto/espfm.proto

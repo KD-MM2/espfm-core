@@ -308,3 +308,14 @@ Partition layout (4MB flash):
 | 0x08000 | 16KB | partition_table |
 | 0x10000 | 2MB | factory (app) |
 | 0x200000 | 2MB | storage (LittleFS) |
+
+---
+
+## Others
+
+### Generate protobuf buffer python
+
+```bash
+# From the project root
+python -m grpc_tools.protoc -I components/f_schema/proto --python_out=tools components/f_schema/proto/espfm.proto
+```

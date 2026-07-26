@@ -22,6 +22,24 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
+try:
+    import rich
+except ImportError:
+    print("Missing dependency: rich. Install with `pip install rich`.")
+    sys.exit(1)
+
+try:
+    import prompt_toolkit
+except ImportError:
+    print("Missing dependency: prompt_toolkit. Install with `pip install prompt_toolkit`.")
+    sys.exit(1)
+
+try:
+    import protobuf
+except ImportError:
+    print("Missing dependency: protobuf. Install with `pip install protobuf`.")
+    sys.exit(1)
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
