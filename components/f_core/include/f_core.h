@@ -61,6 +61,7 @@ typedef enum {
     ESPFM_EVENT_FAN_ALARM,
     ESPFM_EVENT_FAN_ALARM_CLEAR,
     ESPFM_EVENT_CONFIG_CHANGED,
+    ESPFM_EVENT_WIFI_STA_FAILED,
 } espfm_event_id_t;
 
 #ifdef __cplusplus

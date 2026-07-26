@@ -80,10 +80,14 @@ static void _event_handler(void *arg, esp_event_base_t event_base,
             esp_wifi_connect();
             wifi->retry_count++;
             ESP_LOGI(TAG, "STA retry %d/%d", wifi->retry_count, CONFIG_ESPFM_WIFI_MAX_RETRY);
-        } else {
-            ESP_LOGW(TAG, "STA failed after %d retries", wifi->retry_count);
+        } else if (wifi->retry_count == CONFIG_ESPFM_WIFI_MAX_RETRY) {
+            /* First time hitting max — signal failure and stop STA */
+            wifi->retry_count++; /* Prevent re-entry on subsequent disconnects */
+            ESP_LOGW(TAG, "STA failed after %d retries", wifi->retry_count - 1);
             wifi->sta_connected = false;
-        }
+            esp_wifi_disconnect(); /* Stop STA retry loop — frees driver for AP+scan */
+            esp_event_post(ESPFM_EVENT, ESPFM_EVENT_WIFI_STA_FAILED, NULL, 0, pdMS_TO_TICKS(100));
+        } /* else: already failed, ignore subsequent disconnects */
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         snprintf(wifi->ip_str, sizeof(wifi->ip_str),
@@ -157,6 +161,10 @@ esp_err_t f_wifi_init(f_wifi_handle_t *handle) {
         .ap = {
             .max_connection = 4,
             .authmode = WIFI_AUTH_WPA2_PSK,
+            .pmf_cfg = {
+                .capable = true,
+                .required = false,
+            },
         },
     };
     strncpy((char *)ap_config.ap.password, CONFIG_ESPFM_AP_PASSWORD,

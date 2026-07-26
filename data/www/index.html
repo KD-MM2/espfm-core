@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ESPFM WiFi Setup</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f5f5;color:#333;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.1);max-width:400px;width:100%;padding:24px}
+h1{font-size:1.4em;margin-bottom:4px}
+.sub{color:#888;font-size:.85em;margin-bottom:20px}
+.spinner{display:inline-block;width:20px;height:20px;border:3px solid #e0e0e0;border-top-color:#4a90d9;border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.status{padding:12px;text-align:center;color:#666;font-size:.9em}
+.net-list{list-style:none;max-height:300px;overflow-y:auto}
+.net-item{display:flex;align-items:center;padding:12px;border:1px solid #e8e8e8;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:border-color .2s}
+.net-item:hover,.net-item.selected{border-color:#4a90d9;background:#f0f7ff}
+.net-info{flex:1;min-width:0}
+.net-ssid{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.net-meta{display:flex;gap:8px;margin-top:2px;font-size:.8em;color:#888}
+.bars{display:flex;gap:2px;align-items:flex-end;height:16px}
+.bar{width:4px;background:#ccc;border-radius:1px}
+.bar.active{background:#4a90d9}
+.bar:nth-child(1){height:4px}.bar:nth-child(2){height:8px}.bar:nth-child(3){height:12px}.bar:nth-child(4){height:16px}
+.badge{background:#e8e8e8;padding:1px 6px;border-radius:4px;font-size:.75em;font-weight:500}
+.pwd-section{margin-top:12px;display:none}
+.pwd-section.show{display:block}
+input[type=password],input[type=text]{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:1em;margin-top:6px}
+.pwd-wrap{position:relative}
+.pwd-toggle{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:#888;cursor:pointer;font-size:.9em}
+.btn{width:100%;padding:12px;background:#4a90d9;color:#fff;border:none;border-radius:8px;font-size:1em;font-weight:600;cursor:pointer;margin-top:12px;transition:background .2s}
+.btn:hover{background:#3a7bc8}
+.btn:disabled{background:#ccc;cursor:not-allowed}
+.msg{padding:12px;border-radius:8px;margin-top:12px;font-size:.9em;text-align:center}
+.msg.info{background:#e8f4fd;color:#2980b9}
+.msg.error{background:#fde8e8;color:#c0392b}
+.hidden{display:none}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>WiFi Setup</h1>
+  <p class="sub">Connect your ESPFM device to a network</p>
+  <div id="scan-status" class="status"><span class="spinner"></span> Scanning for networks...</div>
+  <ul id="net-list" class="net-list hidden"></ul>
+  <div id="pwd-section" class="pwd-section">
+    <label style="font-size:.85em;color:#666">Password for <strong id="pwd-ssid"></strong></label>
+    <div class="pwd-wrap">
+      <input id="pwd-input" type="password" placeholder="WiFi password" autocomplete="off">
+      <button class="pwd-toggle" onclick="togglePwd()">Show</button>
+    </div>
+    <button id="connect-btn" class="btn" onclick="doConnect()">Connect</button>
+  </div>
+  <div id="msg" class="msg hidden"></div>
+  <button id="retry-btn" class="btn hidden" onclick="doScan()">Scan Again</button>
+</div>
+<script>
+var networks=[];var selectedIdx=-1;
+function signalBars(rssi){if(rssi>-50)return 4;if(rssi>-60)return 3;if(rssi>-70)return 2;return 1;}
+function doScan(){
+  var ss=document.getElementById('scan-status');var nl=document.getElementById('net-list');
+  var rb=document.getElementById('retry-btn');var ps=document.getElementById('pwd-section');
+  var msg=document.getElementById('msg');
+  ss.innerHTML='<span class="spinner"></span> Scanning for networks...';ss.classList.remove('hidden');
+  nl.classList.add('hidden');rb.classList.add('hidden');ps.classList.remove('show');msg.classList.add('hidden');
+  fetch('/scan').then(function(r){return r.json()}).then(function(data){
+    networks=data;if(!networks.length){ss.innerHTML='No networks found.';rb.classList.remove('hidden');return;}
+    ss.classList.add('hidden');nl.classList.remove('hidden');var html='';
+    for(var i=0;i<networks.length;i++){var n=networks[i];var bars=signalBars(n.rssi);
+      html+='<li class="net-item" onclick="selectNet('+i+')"><div class="net-info"><div class="net-ssid">'+escHtml(n.ssid)+'</div>';
+      html+='<div class="net-meta"><span class="badge">'+escHtml(n.auth)+'</span><span>'+n.rssi+' dBm</span></div></div>';
+      html+='<div class="bars">';for(var b=1;b<=4;b++) html+='<div class="bar'+(b<=bars?' active':'')+'"></div>';html+='</div></li>';}
+    nl.innerHTML=html;
+  }).catch(function(){ss.innerHTML='Scan failed.';rb.classList.remove('hidden');});
+}
+function selectNet(idx){selectedIdx=idx;var n=networks[idx];
+  var items=document.querySelectorAll('.net-item');for(var i=0;i<items.length;i++) items[i].classList.remove('selected');
+  items[idx].classList.add('selected');var ps=document.getElementById('pwd-section');
+  document.getElementById('pwd-ssid').textContent=n.ssid;
+  if(n.auth==='OPEN'){ps.classList.remove('show');}else{ps.classList.add('show');}
+  document.getElementById('connect-btn').classList.remove('hidden');}
+function doConnect(){if(selectedIdx<0)return;var n=networks[selectedIdx];var pwd=document.getElementById('pwd-input').value;
+  if(n.auth!=='OPEN'&&pwd.length===0){showMsg('Please enter the password','error');return;}
+  var btn=document.getElementById('connect-btn');btn.disabled=true;btn.textContent='Connecting...';
+  showMsg('Saving credentials and rebooting...','info');
+  fetch('/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssid:n.ssid,password:pwd})
+  }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t)});
+    showMsg('Connected! Device is rebooting...','info');
+  }).catch(function(e){showMsg('Error: '+e.message,'error');btn.disabled=false;btn.textContent='Connect';});}
+function togglePwd(){var inp=document.getElementById('pwd-input');var btn=document.querySelector('.pwd-toggle');
+  if(inp.type==='password'){inp.type='text';btn.textContent='Hide';}else{inp.type='password';btn.textContent='Show';}}
+function showMsg(text,type){var m=document.getElementById('msg');m.textContent=text;m.className='msg '+(type||'info');m.classList.remove('hidden');}
+function escHtml(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+doScan();
+</script>
+</body>
+</html>

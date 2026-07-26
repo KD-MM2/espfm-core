@@ -20,6 +20,7 @@
 #include "f_schedule.h"
 #include "f_coap.h"
 #include "f_config.h"
+#include "f_provision.h"
 
 static const char *TAG = "espfm";
 
@@ -85,6 +86,10 @@ void app_main(void) {
     /* --- WiFi APSTA (AP starts immediately) --- */
     f_wifi_handle_t wifi;
     ESP_ERROR_CHECK(f_wifi_init(&wifi));
+
+    /* --- WiFi Provisioning (captive portal on STA failure) --- */
+    f_provision_handle_t provision;
+    ESP_ERROR_CHECK(f_provision_init(&provision, wifi));
 
     /* --- Wait for WiFi --- */
     ESP_LOGI(TAG, "Waiting for WiFi...");
