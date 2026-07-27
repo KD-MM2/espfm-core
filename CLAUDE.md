@@ -1,42 +1,44 @@
+# espfm-core
+
+ESP-IDF v6.0.1 fan controller with CoAP+Protobuf remote API. Targets ESP32/ESP32-S3.
+
 <!-- dgc-policy-v11 -->
-# Dual-Graph Context Policy
+## Dual-Graph Context Policy
 
 This project uses a local dual-graph MCP server for efficient context retrieval.
 
-## MANDATORY: Adaptive graph_continue rule
+### MANDATORY: Adaptive graph_continue rule
 
 **Call `graph_continue` ONLY when you do NOT already know the relevant files.**
 
-### Call `graph_continue` when:
+#### Call `graph_continue` when:
 - This is the first message of a new task / conversation
 - The task shifts to a completely different area of the codebase
 - You need files you haven't read yet in this session
 
-### SKIP `graph_continue` when:
+#### SKIP `graph_continue` when:
 - You already identified the relevant files earlier in this conversation
 - You are doing follow-up work on files already read (verify, refactor, test, docs, cleanup, commit)
 - The task is pure text (writing a commit message, summarising, explaining)
 
 **If skipping, go directly to `graph_read` on the already-known `file::symbol`.**
 
-## When you DO call graph_continue
+### When you DO call graph_continue
 
 1. **If `graph_continue` returns `needs_project=true`**: call `graph_scan` with `pwd`. Do NOT ask the user.
 
 2. **If `graph_continue` returns `skip=true`**: fewer than 5 files  -  read only specifically named files.
 
-3. **Read `recommended_files`** using `graph_read` — **one call per file**.
-   - `graph_read` accepts a single `file` parameter (string). Call it separately for each recommended file. Do NOT pass an array.
+3. **Read `recommended_files`** using `graph_read`.
    - Always use `file::symbol` notation (e.g. `src/auth.ts::handleLogin`)  -  never read whole files.
    - `recommended_files` entries that already contain `::` must be passed verbatim.
-   - Example: if `recommended_files` is `["src/auth.ts::handleLogin", "src/db.ts"]`, call `graph_read(file: "src/auth.ts::handleLogin")` and `graph_read(file: "src/db.ts")` as two separate calls (they can be parallel).
 
 4. **Obey confidence caps:**
    - `confidence=high` -> Stop. Do NOT grep or explore further.
    - `confidence=medium` -> `fallback_rg` at most `max_supplementary_greps` times, then `graph_read` at most `max_supplementary_files` more symbols. Stop.
    - `confidence=low` -> same as medium. Stop.
 
-## Session State (compact, update after every turn)
+### Session State (compact, update after every turn)
 
 Maintain a short JSON block in your working memory. Update it after each turn:
 
@@ -52,7 +54,7 @@ Maintain a short JSON block in your working memory. Update it after each turn:
 
 Use this state  -  not prose summaries  -  to remember what's been done across turns.
 
-## Token Usage
+### Token Usage
 
 A `token-counter` MCP is available for tracking live token usage.
 
@@ -60,29 +62,25 @@ A `token-counter` MCP is available for tracking live token usage.
 - To show running session cost: `get_session_stats()`
 - To log completed task: `log_usage({input_tokens: N, output_tokens: N, description: "task"})`
 
-Live dashboard URL is printed at startup next to "Token usage".
-
-## Rules
+### Rules
 
 - Do NOT use `rg`, `grep`, or bash file exploration before calling `graph_continue` (when required).
 - Do NOT do broad/recursive exploration at any confidence level.
-- Do NOT dump full chat history.
 - `max_supplementary_greps` and `max_supplementary_files` are hard caps  -  never exceed them.
 - Do NOT call `graph_continue` more than once per turn.
-- Do NOT call `graph_retrieve` more than once per turn.
 - Always use `file::symbol` notation with `graph_read`  -  never bare filenames.
 - After edits, call `graph_register_edit` with changed files using `file::symbol` notation.
 
-## Context Store
+### Context Store
 
-Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, call `graph_add_memory`.
+Whenever you make a decision, identify a task, note a next step, fact, or blocker during a conversation, append it to `.dual-graph/context-store.json`.
 
-**To add an entry:**
+**Entry format:**
+```json
+{"type": "decision|task|next|fact|blocker", "content": "one sentence max 15 words", "tags": ["topic"], "files": ["relevant/file.ts"], "date": "YYYY-MM-DD"}
 ```
-graph_add_memory(type="decision|task|next|fact|blocker", content="one sentence max 15 words", tags=["topic"], files=["relevant/file.ts"])
-```
 
-**Do NOT write context-store.json directly** — always use `graph_add_memory`. It applies pruning and keeps the store healthy.
+**To append:** Read the file -> add the new entry to the array -> Write it back -> call `graph_register_edit` on `.dual-graph/context-store.json`.
 
 **Rules:**
 - Only log things worth remembering across sessions (not every minor detail)
@@ -90,7 +88,7 @@ graph_add_memory(type="decision|task|next|fact|blocker", content="one sentence m
 - `files` lists the files this decision/task relates to (can be empty)
 - Log immediately when the item arises  -  not at session end
 
-## Session End
+### Session End
 
 When the user signals they are done (e.g. "bye", "done", "wrap up", "end session"), proactively update `CONTEXT.md` in the project root with:
 - **Current Task**: one sentence on what was being worked on
@@ -113,158 +111,173 @@ idf.py monitor
 
 All build/flash commands MUST use PowerShell tool. Never use Bash tool for ESP-IDF operations.
 
-## Obsidian Vault — ESP-IDF Knowledge Base
+## Architecture
 
-This project uses an Obsidian vault connected via MCP. The vault stores ESP-IDF documentation and an LLM-maintained wiki.
+### Stack
 
-### Vault Zone Structure
+| Layer | Technology | Notes |
+|-------|-----------|-------|
+| Transport | **libcoap-4** (`espressif/coap ^4.3.5`) | UDP CoAP server, single `coap_task` thread |
+| Serialization | **nanopb-0.4.9.1** | Proto at `components/f_schema/proto/espfm.proto` |
+| Storage | **NVS + LittleFS** | `f_config` persists fan/source/curve/schedule configs |
+| WiFi | `f_wifi` + captive portal provisioning | `f_provision` for initial WiFi setup |
+| mDNS | `f_mdns` | Advertises `_coap._udp` and `_http._http` services |
 
-| Zone | Path | Rule |
-|------|------|------|
-| **Raw sources** | `raw/` | READ-ONLY. Never edit, rename, or move. Only read, cite, reference via wikilinks. |
-| **LLM wiki** | `wiki/` | LLM-maintained. Create, edit, refactor freely. Every page MUST have frontmatter: `title`, `type`, `tags`, `sources`. Every page MUST have ≥1 wikilink. |
-| **Dev notes** | `dev/` | Collaborative. Technical notes, ADRs, debriefs, snippets. |
+### Component Map
 
-### raw/ — ESP-IDF Official Docs
+| Component | Responsibility |
+|-----------|---------------|
+| `f_core` | Boot orchestration, event bus |
+| `f_coap` | CoAP server lifecycle + all route handlers (`f_coap_routes.c`) |
+| `f_schema` | Protobuf schema (`espfm.proto`) + generated nanopb code |
+| `f_fan` | Fan control (LEDC PWM + PCNT tach), slot registry (max 8) |
+| `f_source` | Temperature sources (ADC, DS18B20), slot registry (max 8) |
+| `f_curve` | Fan curves (temp→duty lookup tables), slot registry (max 8) |
+| `f_schedule` | Time-based fan scheduling, slot registry (max 8) |
+| `f_control` | Control loop: reads sources, evaluates curves, sets fan duty |
+| `f_constraints` | Safety limits (min/max duty, critical temps) |
+| `f_config` | NVS+LittleFS persistent config save/load |
+| `f_wifi` | WiFi STA+AP management, reconnect logic |
+| `f_provision` | WiFi provisioning captive portal |
+| `f_mdns` | mDNS service advertisement |
+| `f_ledc` | LEDC PWM driver abstraction |
+| `f_pcnt` | Pulse counter (fan tachometer) |
+| `f_adc` | ADC driver |
+| `f_ds18b20` | 1-Wire temperature sensor driver |
+| `f_gpio` | GPIO pin registry and configuration |
 
-Imported ESP-IDF documentation, one subfolder per chip variant:
+### Key Files
 
-| Path | Contents |
-|------|----------|
-| `raw/esp32/` | ESP-IDF docs for ESP32 |
-| `raw/esp32s3/` | ESP-IDF docs for ESP32-S3 |
-| `raw/esp32c6/` | ESP-IDF docs for ESP32-C6 |
+| File | Purpose |
+|------|---------|
+| `main/main.c` | Boot sequence: NVS → GPIO → drivers → registries → config → control → WiFi → CoAP |
+| `components/f_coap/f_coap.c` | CoAP server lifecycle (start/stop/restart), `coap_task` |
+| `components/f_coap/f_coap_routes.c` | All 22+ CoAP route handlers |
+| `components/f_coap/f_coap_internal.h` | `struct f_coap` definition, internal declarations |
+| `components/f_schema/proto/espfm.proto` | Protobuf schema (all request/response messages) |
+| `components/f_schema/espfm.pb.h` | Generated nanopb header (do not edit manually) |
+| `tools/espfm_shell.py` | Interactive CoAP shell client |
+| `tools/gen_proto.ps1` | Nanopb code generation script |
 
-Each variant folder contains: `api-reference/`, `api-guides/`, `hw-reference/`, `get-started/`, `migration-guides/`, `security/`, `libraries-and-frameworks/`, etc.
+### CoAP Endpoint Catalog
 
-### ESP-IDF Docs Lookup via Obsidian MCP
+| Path | Methods | Handler |
+|------|---------|---------|
+| `fans` | GET, POST | List fans, create fan |
+| `fans/{0..7}` | GET, PUT, DELETE | Get/update/delete fan by ID |
+| `sources` | GET, POST | List sources, create source |
+| `sources/{0..7}` | GET, POST, DELETE | Get/update/delete source by ID |
+| `sources/temp` | POST | Manual temperature update |
+| `curves` | GET, POST | List curves, create curve |
+| `curves/{0..7}` | GET, PUT, DELETE | Get/update/delete curve by ID |
+| `schedules` | GET, POST | List schedules, create schedule |
+| `schedules/{0..7}` | GET, PUT, DELETE | Get/update/delete schedule by ID |
+| `system/info` | GET | Version, uptime, heap, entity counts |
+| `system/hostname` | PUT | Set device hostname |
+| `system/reboot` | POST | Reboot device (2s delay) |
+| `wifi/scan` | GET | Scan for APs |
+| `wifi/status` | GET | Current WiFi connection status |
+| `wifi/connect` | POST | Connect to AP |
 
-**Search ESP-IDF docs in the vault:**
+### Adding a New CoAP Endpoint
 
-```
-# Full-text search across raw/ (fast)
-mcp__obsidian__search_simple --query "LEDC PWM timer configuration"
+1. Add protobuf messages to `components/f_schema/proto/espfm.proto` if needed
+2. Regenerate nanopb (see Protobuf Workflow below)
+3. Add handler function in `components/f_coap/f_coap_routes.c` following existing pattern
+4. Register resource in `f_coap_register_resources()` using `add_resource(ctx, h, "path", get, post, put, del)`
+5. Build: `idf.py build`
+6. Add shell command in `tools/espfm_shell.py` if user-facing
 
-# JsonLogic query (structured, precise)
-mcp__obsidian__search_query --query {"glob": ["raw/esp32s3/api-reference/**", {"var": "path"}]}
+## Protobuf Workflow
 
-# Read a specific doc page
-mcp__obsidian__vault_read --path "raw/esp32s3/api-reference/peripherals/ledc.md"
-```
+Proto file: `components/f_schema/proto/espfm.proto`
+Generated files: `components/f_schema/espfm.pb.h`, `components/f_schema/espfm.pb.c`
 
-**Key Obsidian MCP tools:**
-- `mcp__obsidian__search_simple` — full-text search with relevance scoring
-- `mcp__obsidian__search_query` — JsonLogic queries against frontmatter + path
-- `mcp__obsidian__vault_read` — read any file with frontmatter, links, backlinks
-- `mcp__obsidian__vault_list` — list directory contents
-- `mcp__obsidian__vault_write` — create/overwrite files (wiki/ and dev/ only)
-- `mcp__obsidian__vault_patch` — surgical edits to headings/frontmatter/blocks
-- `mcp__obsidian__vault_append` — append to file
-- `mcp__obsidian__vault_get_document_map` — heading structure + frontmatter keys
+To regenerate after editing the proto:
 
-Use Obsidian MCP when `run-example-search` catalog doesn't cover the specific API question.
+```powershell
+# Activate ESP-IDF (provides nanopb generator)
+& 'C:\Espressif\tools\Microsoft.v6.0.1.PowerShell_profile.ps1'
 
-### wiki/ — LLM-Maintained Knowledge Base
-
-The wiki follows the **LLM-WIKI pattern**: an incrementally built, structured, interlinked collection of markdown files maintained by Claude. Key principles:
-
-- **Persistent, compounding artifact** — knowledge compiled once, kept current, not re-derived per query
-- **Three-layer architecture**: raw sources (immutable) → wiki (LLM-owned) → schema (this CLAUDE.md)
-- **Index-driven navigation**: `wiki/index.md` catalogs all pages; read index first, then drill into pages
-- **Chronological log**: `wiki/log.md` records all ingests/queries/lints with timestamps
-
-#### Operations
-
-**Ingest** (when I say "process X" or "ingest X"):
-1. Read source file(s) from `raw/`.
-2. Discuss key takeaways with me.
-3. Create/update wiki entity pages for each concept found.
-4. Cross-link new pages to existing relevant pages.
-5. Flag contradictions or tensions with existing wiki content.
-6. Create a summary page bridging between the clipping and the concepts.
-7. Update `wiki/index.md` if something is genuinely new.
-8. Report what was done — concepts created/updated, links added.
-
-**Query**: Search wiki pages, read relevant ones, synthesize answer with citations. Good answers can be filed back into wiki as new pages.
-
-**Lint**: Periodically check wiki health — contradictions, stale claims, orphan pages, missing cross-references, data gaps.
-
-#### Strict Limits
-
-- NEVER delete files without explicit confirmation.
-- NEVER run `git add`, `git commit`, or `git push`. I handle all version control manually.
-- You may SUGGEST a commit message when a logical unit of work is done, but don't execute it.
-- NEVER edit CLAUDE.md itself (ask me).
-- If an operation affects more than 5 files, SHOW the plan before executing.
-- If unsure which zone a file belongs to, ASK.
-
-## Mandatory Feature/Fix Cycle
-
-Every feature and fix MUST follow this cycle — no shortcuts:
-
-1. **Understand** — `/embedded-systems` to analyze the feature/bug and define what the change should look like at the hardware/peripheral level
-2. **Lookup** — `/run-example-search` to find standard ESP-IDF patterns (never reinvent)
-3. **Explore** — `/opsx:explore` to investigate APIs, design decisions, pin constraints, and trade-offs before committing to a proposal
-4. **Propose** — `/opsx:propose` with the change, referencing explored findings and catalog examples
-5. **Apply** — `/opsx:apply` to implement tasks
-6. **Build** — `idf.py build` to verify compilation
-7. **Flash** — `idf.py flash` to test on device (skip if no device found)
-8. **Archive** — `/opsx:archive` after build passes
-9. **Commit** — `git add` + `git commit` with conventional commit format
-
-## OpenSpec Workflow
-
-This project uses **OpenSpec** for spec-driven development. Changes are proposed, reviewed, implemented, and archived through the `openspec/` directory.
-
-### Slash commands
-
-| Command | Purpose |
-|---------|---------|
-| `/opsx:explore` | Explore existing specs, changes, and their status |
-| `/opsx:propose` | Propose a new change with spec, design, and tasks |
-| `/opsx:apply` | Apply (implement) the tasks defined in an active change |
-| `/opsx:archive` | Archive a completed change after implementation is verified |
-
-### Directory layout
-
-```
-openspec/
-├── config.yaml              # OpenSpec project configuration
-├── changes/                 # Active (in-progress) change specs
-│   ├── <change-name>/
-│   │   ├── .openspec.yaml   # Change metadata (schema, created date)
-│   │   ├── proposal.md      # Why this change, what it does
-│   │   ├── design.md        # Technical decisions, trade-offs, risks
-│   │   ├── tasks.md         # Implementation checklist
-│   │   └── specs/           # Per-capability requirement specs
-│   └── ...
-└── changes/archive/         # Completed and archived changes
-    └── YYYY-MM-DD-<name>/
+# Run generator
+python C:/Espressif/tools/python/v6.0.1/venv/Lib/site-packages/nanopb/generator/nanopb_generator.py `
+  -I components/f_schema/proto `
+  -I components/f_schema `
+  -D components/f_schema/ `
+  components/f_schema/proto/espfm.proto
 ```
 
-### Workflow
+Or use the shortcut script: `tools/gen_proto.ps1`
 
-1. **Propose** — `/opsx:propose` creates a new change with `proposal.md`, `design.md`, `tasks.md`, and capability specs under `specs/`. Use this for any non-trivial feature, module, or refactor.
-2. **Review** — Review the generated spec and design docs. Edit to match the actual intended behavior before implementing.
-3. **Apply** — `/opsx:apply` implements the tasks. Task items in `tasks.md` are marked `[x]` as completed.
-4. **Archive** — `/opsx:archive` moves the completed change to `archive/` with a date prefix.
-5. **Update IMPLEMENTATION.md** — After archive, update the implemented feature in `IMPLEMENTATION.md`:
-   - Mark the task checkbox: `- [ ]` → `- [x]`
-   - Update the `Progress Tracking` table counts at the bottom of the file
-   - Do **NOT** change the feature description text, do **NOT** add or remove lines, do **NOT** modify anything else in the file. Only the checkbox and the two numbers in the progress table row.
-6. **Commit** — Commit all changes with `git add` and `git commit`. Use conventional commit format: `feat(component): description`. Do NOT commit `.claude/settings.local.json` or `.clang-format`.
+Commit the proto file AND generated files together:
+```bash
+git add components/f_schema/proto/espfm.proto components/f_schema/espfm.pb.h components/f_schema/espfm.pb.c
+git commit -m "feat(proto): description"
+```
 
-Before creating a new change, always use `/opsx:explore` to check for existing specs that may overlap or inform the work.
+## Shell Tool
 
-For full OpenSpec conventions, see `AGENTS.md` (if present) or the `.claude/commands/opsx/` directory.
+Interactive CoAP client at `tools/espfm_shell.py`.
+
+```bash
+python tools/espfm_shell.py                           # connect to default (mDNS scan)
+python tools/espfm_shell.py --host 192.168.0.22       # connect to specific IP
+```
+
+Dependencies: `pip install protobuf rich prompt_toolkit zeroconf`
+
+Key commands: `connect`, `fans list/get/create/update/enable/disable`, `sources list/create/temp`, `curves list/create/update`, `schedules list/create/update`, `system info/reboot`, `wifi scan/status/connect`, `dashboard`, `export/import`.
+
+Generated protobuf bindings: `tools/espfm_pb2.py` (regenerate with `tools/gen_proto.ps1`)
+
 
 ## Project Skills
 
-When working on this project, invoke the relevant skill for the task at hand:
+When working on this project, invoke the relevant skill for the task at hand. Skills are defined in `.claude/ultracode/INVENTORY.md` and `.claude/skills/`.
 
 | Skill | When to Use |
 |-------|-------------|
-| `cpp-pro` | **Essential.** All C/C++ source code — writing headers, implementing functions, refactoring, code review. |
-| `embedded-systems` | Embedded-specific tasks — peripheral drivers (LEDC, PCNT, ADC, GPIO), ISR patterns, FreeRTOS tasks, hardware constraints. |
-| `run-example-search` | **Essential.** Look up ESP-IDF example catalog before implementing — prevents reinventing standard patterns. |
-| `build` | Compiling firmware (`idf.py build`), flashing (`idf.py flash`), serial monitoring, filesystem uploads. |
+| `convention` | **Always.** Auto-load for any code edit. |
+| `coap-route-handler` | Creating or modifying CoAP route handlers in `components/f_coap/`. |
+| `esp-idf-component` | Creating or modifying an ESP-IDF component directory, CMakeLists.txt, or component source/header under `components/`. |
+| `service-module` | Creating or modifying an f_* component that holds state and exposes a handle-based API. |
+| `registry-pattern` | Creating or modifying a slot-based registry component with fixed MAX_COUNT arrays. |
+| `header-interface` | Creating or modifying a public component header (`include/*.h`). |
+| `freertos-task` | Adding or modifying a FreeRTOS task lifecycle (start/stop) inside an f_* component. |
+| `module-hub` | Locating which area/module a path belongs to. |
+| `cpp-pro` | Writing, optimizing, or debugging C/C++ code with modern C++20/23 features, templates, CMake. |
+| `embedded-systems` | Developing firmware for microcontrollers, RTOS, peripheral drivers, interrupt handlers, power optimization. |
+| `build` | Build, upload, monitor, or clean the ESP-IDF project. |
+| `gpio-config` | GPIO pin configuration, wiring, pin mapping, pin conflicts on ESP32. |
+
+### Skill Application Mapping
+
+| File type being changed | Skills to load |
+|------------------------|----------------|
+| `components/f_*/CMakeLists.txt` | `esp-idf-component`, `convention` |
+| `components/f_*/*.c` | `service-module`, `convention` |
+| `components/f_*/include/*.h` | `header-interface`, `convention` |
+| `components/f_coap/f_coap_routes.c` | `coap-route-handler`, `convention` |
+| `components/f_fan/*.c`, `f_source/*.c`, `f_curve/*.c`, `f_schedule/*.c` | `registry-pattern`, `convention` |
+| `components/f_*/f_*.c` (any with background task) | `freertos-task`, `convention` |
+| `main/*.c` | `embedded-systems`, `convention` |
+| `*.h` (any header) | `cpp-pro`, `header-interface`, `convention` |
+
+## Feature Development Workflow
+
+Two-phase workflow for non-trivial features:
+
+1. **Spec & Plan** — `/superpowers:brainstorming` to explore, design, and write specs + plans
+   - Outputs: `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and `docs/superpowers/plans/YYYY-MM-DD-<topic>.md`
+   - Specs/plans are project-local scratch (gitignored), not committed
+
+2. **Implement** — `/ultracode:orchestrate` with the spec and plan to execute
+   - Spawns implement, code-review, and test subagents per plan phase
+   - Handles build verification, code review loops, and git commits
+
+Typical flow:
+```
+/superpowers:brainstorming "add feature X"
+  → user approves design → user approves plan
+/ultracode:orchestrate implement plan at docs/superpowers/plans/YYYY-MM-DD-feature-x.md
+```
