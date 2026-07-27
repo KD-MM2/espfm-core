@@ -409,6 +409,10 @@ class ESPFMClient:
         _, data = self._put("/system/hostname", req)
         return self._decode(pb.StatusResponse, data)
 
+    def system_reboot(self) -> pb.StatusResponse:
+        _, data = self._post("/system/reboot")
+        return self._decode(pb.StatusResponse, data)
+
 
 # ============================================================
 # Utility helpers
@@ -922,30 +926,48 @@ def _handle_wifi(shell: ESPFMShell, args: list[str]) -> None:
 
 
 def _handle_system(shell: ESPFMShell, args: list[str]) -> None:
-    if not args or args[0] != "info":
-        console.print("[yellow]Usage: system info[/yellow]")
+    if not args:
+        console.print("[yellow]Usage: system <info|reboot>[/yellow]")
         return
-    if not _check_connected(shell):
-        return
+    action = args[0]
 
-    try:
-        si = shell.client.system_info()
-        uptime_h = si.uptime_s // 3600
-        uptime_m = (si.uptime_s % 3600) // 60
-        uptime_s = si.uptime_s % 60
-        lines = [
-            f"[bold]System Info[/bold]",
-            f"  Version:   {si.version}",
-            f"  Uptime:    {uptime_h}h {uptime_m}m {uptime_s}s",
-            f"  Heap Free: {si.heap_free} bytes",
-            f"  Fans:      {si.fan_count}",
-            f"  Sources:   {si.source_count}",
-            f"  Curves:    {si.curve_count}",
-            f"  Schedules: {si.schedule_count}",
-        ]
-        console.print(Panel("\n".join(lines), title="System"))
-    except CoapError as e:
-        console.print(f"[red]{_error_message(e)}[/red]")
+    if action == "info":
+        if not _check_connected(shell):
+            return
+        try:
+            si = shell.client.system_info()
+            uptime_h = si.uptime_s // 3600
+            uptime_m = (si.uptime_s % 3600) // 60
+            uptime_s = si.uptime_s % 60
+            lines = [
+                f"[bold]System Info[/bold]",
+                f"  Version:   {si.version}",
+                f"  Uptime:    {uptime_h}h {uptime_m}m {uptime_s}s",
+                f"  Heap Free: {si.heap_free} bytes",
+                f"  Fans:      {si.fan_count}",
+                f"  Sources:   {si.source_count}",
+                f"  Curves:    {si.curve_count}",
+                f"  Schedules: {si.schedule_count}",
+            ]
+            console.print(Panel("\n".join(lines), title="System"))
+        except CoapError as e:
+            console.print(f"[red]{_error_message(e)}[/red]")
+
+    elif action == "reboot":
+        if not _check_connected(shell):
+            return
+        try:
+            result = shell.client.system_reboot()
+            if result.ok:
+                console.print("[yellow]Rebooting device in 2 seconds...[/yellow]")
+            else:
+                console.print(f"[red]Device reboot already pending.[/red]")
+        except CoapError as e:
+            console.print(f"[red]{_error_message(e)}[/red]")
+
+    else:
+        console.print(f"[yellow]Unknown system action: {action}[/yellow]")
+        console.print("[yellow]Usage: system <info|reboot>[/yellow]")
 
 
 def _handle_devices(shell: ESPFMShell, args: list[str]) -> None:
@@ -1546,7 +1568,10 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
                 "  wifi status                          — Show STA status\n"
                 "  wifi connect --ssid <n> --pass <p>   — Connect to AP"
             ),
-            "system": "system info  — Show version, uptime, heap, entity counts",
+            "system": (
+                "system info    — Show version, uptime, heap, entity counts\n"
+                "  system reboot  — Reboot the device (2s delay)"
+            ),
             "devices": (
                 "devices scan [--timeout N]            — Scan LAN for ESPFM devices (mDNS)\n"
                 "  devices connect XXYY                — Connect to device by MAC suffix\n"
@@ -1576,7 +1601,7 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
   curves     list | get | create | update | delete
   schedules  list | create | update | delete
   wifi       scan | status | connect
-  system     info
+  system     info | reboot
   devices    scan | connect | update
 
 [bold cyan]Data Operations[/bold cyan]
