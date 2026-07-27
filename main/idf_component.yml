@@ -19,3 +19,4 @@ dependencies:
   espressif/cjson: '*'
   joltwallet/littlefs: '*'
   espressif/coap: ^4.3.5~7
+  espressif/mdns: '*'

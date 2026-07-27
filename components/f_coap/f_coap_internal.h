@@ -6,6 +6,7 @@
 #include "f_curve.h"
 #include "f_schedule.h"
 #include "f_config.h"
+#include "f_mdns.h"
 #include "coap.h"
 #include "pb.h"
 #include "espfm.pb.h"
@@ -35,6 +36,7 @@ struct f_coap {
     f_curve_handle_t curve;
     f_schedule_handle_t schedule;
     f_config_handle_t config;
+    f_mdns_handle_t mdns;
 };
 
 /* Per-request context passed to route handlers */

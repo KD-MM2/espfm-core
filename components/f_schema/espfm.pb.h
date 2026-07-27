@@ -96,6 +96,7 @@ typedef struct _SystemInfo {
     uint32_t source_count;
     uint32_t curve_count;
     uint32_t schedule_count;
+    char hostname[64]; /* mDNS hostname (without .local) */
 } SystemInfo;
 
 typedef struct _WifiStatus {
@@ -208,6 +209,10 @@ typedef struct _WifiConnectRequest {
     char password[64];
 } WifiConnectRequest;
 
+typedef struct _HostnameRequest {
+    char hostname[64]; /* new hostname to set */
+} HostnameRequest;
+
 typedef struct _ConfigFile {
     char version[8]; /* "3.0" */
     bool has_fans;
@@ -285,6 +290,7 @@ extern "C" {
 
 
 
+
 /* Initializer values for message structs */
 #define FanInfo_init_default                     {0, "", _FanMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _FanAlarm_MIN}
 #define SourceInfo_init_default                  {0, "", _SourceType_MIN, _SourceStatus_MIN, 0, 0}
@@ -292,7 +298,7 @@ extern "C" {
 #define CurveInfo_init_default                   {0, "", 0, {CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default}}
 #define ScheduleInfo_init_default                {0, 0, 0, 0, 0, 0}
 #define WifiApRecord_init_default                {"", 0, 0, 0}
-#define SystemInfo_init_default                  {"", 0, 0, 0, 0, 0, 0}
+#define SystemInfo_init_default                  {"", 0, 0, 0, 0, 0, 0, ""}
 #define WifiStatus_init_default                  {0, "", ""}
 #define FanList_init_default                     {0, {FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default}}
 #define FanCreateRequest_init_default            {0, 0, ""}
@@ -309,6 +315,7 @@ extern "C" {
 #define ScheduleUpdateRequest_init_default       {0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define WifiScanResult_init_default              {0, {WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default}}
 #define WifiConnectRequest_init_default          {"", ""}
+#define HostnameRequest_init_default             {""}
 #define ConfigFile_init_default                  {"", false, FanList_init_default, false, SourceList_init_default, false, CurveList_init_default, false, ScheduleList_init_default}
 #define Empty_init_default                       {0}
 #define StatusResponse_init_default              {0, 0, ""}
@@ -318,7 +325,7 @@ extern "C" {
 #define CurveInfo_init_zero                      {0, "", 0, {CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero}}
 #define ScheduleInfo_init_zero                   {0, 0, 0, 0, 0, 0}
 #define WifiApRecord_init_zero                   {"", 0, 0, 0}
-#define SystemInfo_init_zero                     {"", 0, 0, 0, 0, 0, 0}
+#define SystemInfo_init_zero                     {"", 0, 0, 0, 0, 0, 0, ""}
 #define WifiStatus_init_zero                     {0, "", ""}
 #define FanList_init_zero                        {0, {FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero}}
 #define FanCreateRequest_init_zero               {0, 0, ""}
@@ -335,6 +342,7 @@ extern "C" {
 #define ScheduleUpdateRequest_init_zero          {0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define WifiScanResult_init_zero                 {0, {WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero}}
 #define WifiConnectRequest_init_zero             {"", ""}
+#define HostnameRequest_init_zero                {""}
 #define ConfigFile_init_zero                     {"", false, FanList_init_zero, false, SourceList_init_zero, false, CurveList_init_zero, false, ScheduleList_init_zero}
 #define Empty_init_zero                          {0}
 #define StatusResponse_init_zero                 {0, 0, ""}
@@ -382,6 +390,7 @@ extern "C" {
 #define SystemInfo_source_count_tag              5
 #define SystemInfo_curve_count_tag               6
 #define SystemInfo_schedule_count_tag            7
+#define SystemInfo_hostname_tag                  8
 #define WifiStatus_sta_connected_tag             1
 #define WifiStatus_sta_ip_tag                    2
 #define WifiStatus_ap_ip_tag                     3
@@ -425,6 +434,7 @@ extern "C" {
 #define WifiScanResult_aps_tag                   1
 #define WifiConnectRequest_ssid_tag              1
 #define WifiConnectRequest_password_tag          2
+#define HostnameRequest_hostname_tag             1
 #define ConfigFile_version_tag                   1
 #define ConfigFile_fans_tag                      2
 #define ConfigFile_sources_tag                   3
@@ -502,7 +512,8 @@ X(a, STATIC,   SINGULAR, UINT32,   heap_free,         3) \
 X(a, STATIC,   SINGULAR, UINT32,   fan_count,         4) \
 X(a, STATIC,   SINGULAR, UINT32,   source_count,      5) \
 X(a, STATIC,   SINGULAR, UINT32,   curve_count,       6) \
-X(a, STATIC,   SINGULAR, UINT32,   schedule_count,    7)
+X(a, STATIC,   SINGULAR, UINT32,   schedule_count,    7) \
+X(a, STATIC,   SINGULAR, STRING,   hostname,          8)
 #define SystemInfo_CALLBACK NULL
 #define SystemInfo_DEFAULT NULL
 
@@ -620,6 +631,11 @@ X(a, STATIC,   SINGULAR, STRING,   password,          2)
 #define WifiConnectRequest_CALLBACK NULL
 #define WifiConnectRequest_DEFAULT NULL
 
+#define HostnameRequest_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   hostname,          1)
+#define HostnameRequest_CALLBACK NULL
+#define HostnameRequest_DEFAULT NULL
+
 #define ConfigFile_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   version,           1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  fans,              2) \
@@ -668,6 +684,7 @@ extern const pb_msgdesc_t ScheduleCreateRequest_msg;
 extern const pb_msgdesc_t ScheduleUpdateRequest_msg;
 extern const pb_msgdesc_t WifiScanResult_msg;
 extern const pb_msgdesc_t WifiConnectRequest_msg;
+extern const pb_msgdesc_t HostnameRequest_msg;
 extern const pb_msgdesc_t ConfigFile_msg;
 extern const pb_msgdesc_t Empty_msg;
 extern const pb_msgdesc_t StatusResponse_msg;
@@ -696,6 +713,7 @@ extern const pb_msgdesc_t StatusResponse_msg;
 #define ScheduleUpdateRequest_fields &ScheduleUpdateRequest_msg
 #define WifiScanResult_fields &WifiScanResult_msg
 #define WifiConnectRequest_fields &WifiConnectRequest_msg
+#define HostnameRequest_fields &HostnameRequest_msg
 #define ConfigFile_fields &ConfigFile_msg
 #define Empty_fields &Empty_msg
 #define StatusResponse_fields &StatusResponse_msg
@@ -714,6 +732,7 @@ extern const pb_msgdesc_t StatusResponse_msg;
 #define FanInfo_size                             79
 #define FanList_size                             648
 #define FanUpdateRequest_size                    40
+#define HostnameRequest_size                     65
 #define ManualTempRequest_size                   11
 #define ScheduleCreateRequest_size               26
 #define ScheduleInfo_size                        32
@@ -723,7 +742,7 @@ extern const pb_msgdesc_t StatusResponse_msg;
 #define SourceInfo_size                          38
 #define SourceList_size                          320
 #define StatusResponse_size                      73
-#define SystemInfo_size                          49
+#define SystemInfo_size                          114
 #define WifiApRecord_size                        57
 #define WifiConnectRequest_size                  99
 #define WifiScanResult_size                      944

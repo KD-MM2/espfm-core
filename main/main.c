@@ -21,6 +21,7 @@
 #include "f_coap.h"
 #include "f_config.h"
 #include "f_provision.h"
+#include "f_mdns.h"
 
 static const char *TAG = "espfm";
 
@@ -79,13 +80,17 @@ void app_main(void) {
     ESP_ERROR_CHECK(f_config_init(&config, "storage", "/littlefs"));
     ESP_ERROR_CHECK(f_config_load_all(config, fan, source, curve, schedule));
 
-    /* --- CoAP Server (UDP :5683, Protobuf, WiFi-aware lifecycle) --- */
-    f_coap_handle_t coap;
-    ESP_ERROR_CHECK(f_coap_init(&coap, fan, source, curve, schedule, config));
-
     /* --- WiFi APSTA (AP starts immediately) --- */
     f_wifi_handle_t wifi;
     ESP_ERROR_CHECK(f_wifi_init(&wifi));
+
+    /* --- mDNS Service Discovery (after WiFi — needs STA netif for hostname) --- */
+    f_mdns_handle_t mdns;
+    ESP_ERROR_CHECK(f_mdns_init(&mdns));
+
+    /* --- CoAP Server (UDP :5683, Protobuf, WiFi-aware lifecycle) --- */
+    f_coap_handle_t coap;
+    ESP_ERROR_CHECK(f_coap_init(&coap, fan, source, curve, schedule, config, mdns));
 
     /* --- WiFi Provisioning (captive portal on STA failure) --- */
     f_provision_handle_t provision;
