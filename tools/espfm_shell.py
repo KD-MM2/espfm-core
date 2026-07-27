@@ -34,11 +34,11 @@ except ImportError:
     print("Missing dependency: prompt_toolkit. Install with `pip install prompt_toolkit`.")
     sys.exit(1)
 
-# try:
-#     import protobuf
-# except ImportError:
-#     print("Missing dependency: protobuf. Install with `pip install protobuf`.")
-#     sys.exit(1)
+try:
+    import zeroconf
+except ImportError:
+    print("Missing dependency: zeroconf. Install with `pip install zeroconf`.")
+    sys.exit(1)
 
 from rich.console import Console
 from rich.panel import Panel
@@ -994,7 +994,8 @@ def _devices_scan(timeout: float) -> None:
             info = zc.get_service_info(svc_type, name)
             if info is None:
                 return
-            hostname = name.split(".")[0]  # e.g. "espfm-b629"
+            hostname = info.server.rstrip(".") if info.server else name.split(".")[0]
+            hostname = hostname.replace(".local", "")
             ip = ".".join(str(b) for b in info.addresses[0]) if info.addresses else "?"
             txt: dict[str, str] = {}
             if info.properties:
@@ -1053,7 +1054,8 @@ def _devices_connect(shell: ESPFMShell, suffix: str) -> None:
             info = zc.get_service_info(svc_type, name)
             if info is None or not info.addresses:
                 return
-            hostname = name.split(".")[0]
+            hostname = info.server.rstrip(".") if info.server else name.split(".")[0]
+            hostname = hostname.replace(".local", "")
             if hostname.endswith(suffix):
                 ip = ".".join(str(b) for b in info.addresses[0])
                 results.append((ip, info.port))
@@ -1094,7 +1096,8 @@ def _devices_update(shell: ESPFMShell, suffix: str, hostname: str) -> None:
             info = zc.get_service_info(svc_type, name)
             if info is None or not info.addresses:
                 return
-            hn = name.split(".")[0]
+            hn = info.server.rstrip(".") if info.server else name.split(".")[0]
+            hn = hn.replace(".local", "")
             if hn.endswith(suffix):
                 ip = ".".join(str(b) for b in info.addresses[0])
                 results.append((ip, info.port))
