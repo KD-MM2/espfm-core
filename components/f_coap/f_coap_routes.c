@@ -99,7 +99,7 @@ static void handle_fan_get(coap_resource_t *resource, coap_session_t *session,
             return;
         }
         static FanInfo pb;
-        f_coap_fan_to_pb(&fi, &pb);
+        espfm_fan_to_pb(&fi, &pb);
         encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &pb, &FanInfo_msg);
     } else {
         /* GET /fans — list all */
@@ -108,7 +108,7 @@ static void handle_fan_get(coap_resource_t *resource, coap_session_t *session,
         for (uint8_t i = 0; i < F_FAN_MAX_COUNT; i++) {
             f_fan_info_t fi;
             if (f_fan_get_info(h->fan, i, &fi) == ESP_OK)
-                f_coap_fan_to_pb(&fi, &list.fans[list.fans_count++]);
+                espfm_fan_to_pb(&fi, &list.fans[list.fans_count++]);
         }
         encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &list, &FanList_msg);
     }
@@ -132,7 +132,7 @@ static void handle_fan_post(coap_resource_t *resource, coap_session_t *session,
     f_fan_info_t fi;
     f_fan_get_info(h->fan, nid, &fi);
     static FanInfo pb;
-    f_coap_fan_to_pb(&fi, &pb);
+    espfm_fan_to_pb(&fi, &pb);
     encode_response(resp, COAP_RESPONSE_CODE_CREATED, &pb, &FanInfo_msg);
 }
 
@@ -169,7 +169,7 @@ static void handle_fan_put(coap_resource_t *resource, coap_session_t *session,
     save_config(h);
     f_fan_get_info(h->fan, (uint8_t)id, &fi);
     static FanInfo pb;
-    f_coap_fan_to_pb(&fi, &pb);
+    espfm_fan_to_pb(&fi, &pb);
     encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &pb, &FanInfo_msg);
 }
 
@@ -215,7 +215,7 @@ static void handle_source_get(coap_resource_t *resource, coap_session_t *session
             return;
         }
         static SourceInfo pb;
-        f_coap_source_to_pb(&si, &pb);
+        espfm_source_to_pb(&si, &pb);
         encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &pb, &SourceInfo_msg);
     } else {
         /* GET /sources — list all */
@@ -224,7 +224,7 @@ static void handle_source_get(coap_resource_t *resource, coap_session_t *session
         for (uint8_t i = 0; i < F_SOURCE_MAX_COUNT; i++) {
             f_source_info_t si;
             if (f_source_get_info(h->source, i, &si) == ESP_OK)
-                f_coap_source_to_pb(&si, &list.sources[list.sources_count++]);
+                espfm_source_to_pb(&si, &list.sources[list.sources_count++]);
         }
         encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &list, &SourceList_msg);
     }
@@ -274,7 +274,7 @@ static void handle_source_post(coap_resource_t *resource, coap_session_t *sessio
         f_source_info_t si;
         f_source_get_info(h->source, nid, &si);
         static SourceInfo pb;
-        f_coap_source_to_pb(&si, &pb);
+        espfm_source_to_pb(&si, &pb);
         encode_response(resp, COAP_RESPONSE_CODE_CREATED, &pb, &SourceInfo_msg);
     }
 }
@@ -322,7 +322,7 @@ static void handle_curve_get(coap_resource_t *resource, coap_session_t *session,
             return;
         }
         static CurveInfo pb;
-        f_coap_curve_to_pb(&ci, &pb);
+        espfm_curve_to_pb(&ci, &pb);
         encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &pb, &CurveInfo_msg);
     } else {
         /* GET /curves — list all */
@@ -331,7 +331,7 @@ static void handle_curve_get(coap_resource_t *resource, coap_session_t *session,
         for (uint8_t i = 0; i < F_CURVE_MAX_COUNT; i++) {
             f_curve_info_t ci;
             if (f_curve_get_info(h->curve, i, &ci) == ESP_OK)
-                f_coap_curve_to_pb(&ci, &list.curves[list.curves_count++]);
+                espfm_curve_to_pb(&ci, &list.curves[list.curves_count++]);
         }
         encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &list, &CurveList_msg);
     }
@@ -362,7 +362,7 @@ static void handle_curve_post(coap_resource_t *resource, coap_session_t *session
     save_config(h);
     f_curve_get_info(h->curve, nid, &ci);
     static CurveInfo pb;
-    f_coap_curve_to_pb(&ci, &pb);
+    espfm_curve_to_pb(&ci, &pb);
     encode_response(resp, COAP_RESPONSE_CODE_CREATED, &pb, &CurveInfo_msg);
 }
 
@@ -400,7 +400,7 @@ static void handle_curve_put(coap_resource_t *resource, coap_session_t *session,
     save_config(h);
     f_curve_get_info(h->curve, oid, &ci);
     static CurveInfo pb;
-    f_coap_curve_to_pb(&ci, &pb);
+    espfm_curve_to_pb(&ci, &pb);
     encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &pb, &CurveInfo_msg);
 }
 
@@ -446,7 +446,7 @@ static void handle_schedule_get(coap_resource_t *resource, coap_session_t *sessi
             return;
         }
         static ScheduleInfo pb;
-        f_coap_schedule_to_pb(&si, &pb);
+        espfm_schedule_to_pb(&si, &pb);
         encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &pb, &ScheduleInfo_msg);
     } else {
         /* GET /schedules — list all */
@@ -455,7 +455,7 @@ static void handle_schedule_get(coap_resource_t *resource, coap_session_t *sessi
         for (uint8_t i = 0; i < F_SCHEDULE_MAX_COUNT; i++) {
             f_schedule_info_t si;
             if (f_schedule_get_info(h->schedule, i, &si) == ESP_OK)
-                f_coap_schedule_to_pb(&si, &list.schedules[list.schedules_count++]);
+                espfm_schedule_to_pb(&si, &list.schedules[list.schedules_count++]);
         }
         encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &list, &ScheduleList_msg);
     }
@@ -484,7 +484,7 @@ static void handle_schedule_post(coap_resource_t *resource, coap_session_t *sess
     save_config(h);
     f_schedule_get_info(h->schedule, nid, &si);
     static ScheduleInfo pb;
-    f_coap_schedule_to_pb(&si, &pb);
+    espfm_schedule_to_pb(&si, &pb);
     encode_response(resp, COAP_RESPONSE_CODE_CREATED, &pb, &ScheduleInfo_msg);
 }
 
@@ -522,7 +522,7 @@ static void handle_schedule_put(coap_resource_t *resource, coap_session_t *sessi
     save_config(h);
     f_schedule_get_info(h->schedule, (uint8_t)id, &si);
     static ScheduleInfo pb;
-    f_coap_schedule_to_pb(&si, &pb);
+    espfm_schedule_to_pb(&si, &pb);
     encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &pb, &ScheduleInfo_msg);
 }
 
