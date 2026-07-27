@@ -746,114 +746,49 @@ static void handle_system_put(coap_resource_t *resource,
 }
 
 /* ------------------------------------------------------------------ */
-/*  Unknown-resource handler — catch-all for sub-paths                 */
-/*  libcoap matches by exact URI path.  /fans/3, /system/info, etc.   */
-/*  don't match single-segment resources, so they land here.          */
+/*  Resource registration                                              */
+/*  libcoap matches by exact URI path.  Register every path the       */
+/*  shell sends, including sub-paths like /system/info, /wifi/scan.   */
 /* ------------------------------------------------------------------ */
 
-static void handle_unknown(coap_resource_t *resource,
-                           coap_session_t *session,
-                           const coap_pdu_t *req,
-                           const coap_string_t *query,
-                           coap_pdu_t *resp)
+static void add_resource(coap_context_t *ctx, struct f_coap *h,
+                         const char *path, coap_method_handler_t get,
+                         coap_method_handler_t post,
+                         coap_method_handler_t put,
+                         coap_method_handler_t del)
 {
-    char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
-    int nseg = parse_segments(req, seg, COAP_MAX_SEG);
-    if (nseg < 2) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
-        return;
-    }
-
-    coap_pdu_code_t method = coap_pdu_get_code(req);
-
-    /* /fans/{id} */
-    if (strcmp(seg[0], "fans") == 0) {
-        if (method == COAP_REQUEST_CODE_GET)      handle_fan_get(resource, session, req, query, resp);
-        else if (method == COAP_REQUEST_CODE_PUT)  handle_fan_put(resource, session, req, query, resp);
-        else if (method == COAP_REQUEST_CODE_DELETE) handle_fan_delete(resource, session, req, query, resp);
-        else coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
-        return;
-    }
-    /* /sources/{id} */
-    if (strcmp(seg[0], "sources") == 0) {
-        if (method == COAP_REQUEST_CODE_GET)      handle_source_get(resource, session, req, query, resp);
-        else if (method == COAP_REQUEST_CODE_DELETE) handle_source_delete(resource, session, req, query, resp);
-        else if (method == COAP_REQUEST_CODE_POST) handle_source_post(resource, session, req, query, resp);
-        else coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
-        return;
-    }
-    /* /curves/{id} */
-    if (strcmp(seg[0], "curves") == 0) {
-        if (method == COAP_REQUEST_CODE_GET)      handle_curve_get(resource, session, req, query, resp);
-        else if (method == COAP_REQUEST_CODE_PUT)  handle_curve_put(resource, session, req, query, resp);
-        else if (method == COAP_REQUEST_CODE_DELETE) handle_curve_delete(resource, session, req, query, resp);
-        else coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
-        return;
-    }
-    /* /schedules/{id} */
-    if (strcmp(seg[0], "schedules") == 0) {
-        if (method == COAP_REQUEST_CODE_GET)      handle_schedule_get(resource, session, req, query, resp);
-        else if (method == COAP_REQUEST_CODE_PUT)  handle_schedule_put(resource, session, req, query, resp);
-        else if (method == COAP_REQUEST_CODE_DELETE) handle_schedule_delete(resource, session, req, query, resp);
-        else coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
-        return;
-    }
-    /* /wifi/{scan,status,connect} */
-    if (strcmp(seg[0], "wifi") == 0) {
-        if (method == COAP_REQUEST_CODE_GET)  handle_wifi_get(resource, session, req, query, resp);
-        else if (method == COAP_REQUEST_CODE_POST) handle_wifi_post(resource, session, req, query, resp);
-        else coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
-        return;
-    }
-    /* /system/{info,hostname} */
-    if (strcmp(seg[0], "system") == 0) {
-        if (method == COAP_REQUEST_CODE_GET)  handle_system_get(resource, session, req, query, resp);
-        else if (method == COAP_REQUEST_CODE_PUT) handle_system_put(resource, session, req, query, resp);
-        else coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
-        return;
-    }
-
-    coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
+    coap_resource_t *r = coap_resource_init(coap_make_str_const(path), 0);
+    if (get)  coap_register_handler(r, COAP_REQUEST_CODE_GET, get);
+    if (post) coap_register_handler(r, COAP_REQUEST_CODE_POST, post);
+    if (put)  coap_register_handler(r, COAP_REQUEST_CODE_PUT, put);
+    if (del)  coap_register_handler(r, COAP_REQUEST_CODE_DELETE, del);
+    coap_resource_set_userdata(r, h);
+    coap_add_resource(ctx, r);
 }
-
-/* ------------------------------------------------------------------ */
-/*  Resource registration — one resource per top-level path            */
-/* ------------------------------------------------------------------ */
 
 void f_coap_register_resources(coap_context_t *ctx, struct f_coap *h)
 {
-    coap_resource_t *r;
-
     /* /fans — list (GET), create (POST) */
-    r = coap_resource_init(coap_make_str_const("fans"), 0);
-    coap_register_handler(r, COAP_REQUEST_CODE_GET, handle_fan_get);
-    coap_register_handler(r, COAP_REQUEST_CODE_POST, handle_fan_post);
-    coap_resource_set_userdata(r, h);
-    coap_add_resource(ctx, r);
+    add_resource(ctx, h, "fans", handle_fan_get, handle_fan_post, NULL, NULL);
 
     /* /sources — list (GET), create (POST) */
-    r = coap_resource_init(coap_make_str_const("sources"), 0);
-    coap_register_handler(r, COAP_REQUEST_CODE_GET, handle_source_get);
-    coap_register_handler(r, COAP_REQUEST_CODE_POST, handle_source_post);
-    coap_resource_set_userdata(r, h);
-    coap_add_resource(ctx, r);
+    add_resource(ctx, h, "sources", handle_source_get, handle_source_post, NULL, NULL);
 
     /* /curves — list (GET), create (POST) */
-    r = coap_resource_init(coap_make_str_const("curves"), 0);
-    coap_register_handler(r, COAP_REQUEST_CODE_GET, handle_curve_get);
-    coap_register_handler(r, COAP_REQUEST_CODE_POST, handle_curve_post);
-    coap_resource_set_userdata(r, h);
-    coap_add_resource(ctx, r);
+    add_resource(ctx, h, "curves", handle_curve_get, handle_curve_post, NULL, NULL);
 
     /* /schedules — list (GET), create (POST) */
-    r = coap_resource_init(coap_make_str_const("schedules"), 0);
-    coap_register_handler(r, COAP_REQUEST_CODE_GET, handle_schedule_get);
-    coap_register_handler(r, COAP_REQUEST_CODE_POST, handle_schedule_post);
-    coap_resource_set_userdata(r, h);
-    coap_add_resource(ctx, r);
+    add_resource(ctx, h, "schedules", handle_schedule_get, handle_schedule_post, NULL, NULL);
 
-    /* Catch-all for sub-paths: /fans/{id}, /system/info, /wifi/scan, etc. */
-    r = coap_resource_unknown_init2(handle_unknown, 0);
-    coap_resource_set_userdata(r, h);
-    coap_add_resource(ctx, r);
+    /* /system/info */
+    add_resource(ctx, h, "system/info", handle_system_get, NULL, NULL, NULL);
+    /* /system/hostname */
+    add_resource(ctx, h, "system/hostname", NULL, NULL, handle_system_put, NULL);
+
+    /* /wifi/scan */
+    add_resource(ctx, h, "wifi/scan", handle_wifi_get, NULL, NULL, NULL);
+    /* /wifi/status */
+    add_resource(ctx, h, "wifi/status", handle_wifi_get, NULL, NULL, NULL);
+    /* /wifi/connect */
+    add_resource(ctx, h, "wifi/connect", NULL, handle_wifi_post, NULL, NULL);
 }
