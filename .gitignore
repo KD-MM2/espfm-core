@@ -90,4 +90,4 @@ _build.ps1
 build_output.txt
 _flash.ps1
 flash_output.txt
-idf-extra-components/
+idf-extra-components/docs/superpowers/
