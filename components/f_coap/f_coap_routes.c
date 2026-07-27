@@ -169,6 +169,7 @@ static void handle_fan_put(coap_resource_t *resource, coap_session_t *session,
     if (ur.has_schedule_id) f_fan_set_schedule(h->fan, (uint8_t)id, (uint8_t)ur.schedule_id);
     if (ur.has_group_id)    f_fan_set_group(h->fan, (uint8_t)id, (uint8_t)ur.group_id);
     if (ur.has_inverted)    f_fan_set_inverted(h->fan, (uint8_t)id, ur.inverted);
+    if (ur.has_enabled)     f_fan_set_enabled(h->fan, (uint8_t)id, ur.enabled);
     save_config(h);
     f_fan_get_info(h->fan, (uint8_t)id, &fi);
     static FanInfo pb;
