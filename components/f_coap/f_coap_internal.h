@@ -7,7 +7,7 @@
 #include "f_schedule.h"
 #include "f_config.h"
 #include "f_mdns.h"
-#include "coap.h"
+#include <coap3/coap.h>
 #include "pb.h"
 #include "espfm.pb.h"
 #include <stdint.h>

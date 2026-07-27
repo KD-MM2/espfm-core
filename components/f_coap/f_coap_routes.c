@@ -14,7 +14,7 @@
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "esp_system.h"
-#include "coap.h"
+#include <coap3/coap.h>
 #include "pb_encode.h"
 #include "pb_decode.h"
 #include <string.h>

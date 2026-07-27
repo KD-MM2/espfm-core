@@ -8,7 +8,7 @@
 #include "esp_wifi.h"
 #include "lwip/sockets.h"
 #include "lwip/inet.h"
-#include "coap.h"
+#include <coap3/coap.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
