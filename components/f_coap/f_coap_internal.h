@@ -26,10 +26,10 @@ extern "C" {
 struct f_coap {
     coap_context_t *ctx;
     coap_endpoint_t *ep;
-    coap_session_t *session;
-    bool running;
+    volatile bool running;
+    volatile bool start_requested;
+    volatile bool stop_requested;
     TaskHandle_t task;
-    SemaphoreHandle_t start_sem;
     f_fan_handle_t fan;
     f_source_handle_t source;
     f_curve_handle_t curve;
