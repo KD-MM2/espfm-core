@@ -1692,7 +1692,7 @@ class ESPFMShell:
                 "fans", "sources", "curves", "schedules", "wifi", "system", "devices",
                 "dashboard", "export", "import",
                 "list", "get", "create", "update", "delete", "enable", "disable", "temp",
-                "scan", "status", "info",
+                "scan", "status", "info", "reboot",
                 "--pwm", "--tach", "--name", "--type", "--gpio", "--temp",
                 "--duty", "--mode", "--source", "--curve", "--schedule",
                 "--group", "--inverted", "--enabled",
