@@ -780,6 +780,19 @@ void f_coap_register_resources(coap_context_t *ctx, struct f_coap *h)
     /* /schedules — list (GET), create (POST) */
     add_resource(ctx, h, "schedules", handle_schedule_get, handle_schedule_post, NULL, NULL);
 
+    /* Sub-paths for {resource}/{id} — register for IDs 0..7 */
+    for (int i = 0; i < 8; i++) {
+        char path[16];
+        snprintf(path, sizeof(path), "fans/%d", i);
+        add_resource(ctx, h, path, handle_fan_get, NULL, handle_fan_put, handle_fan_delete);
+        snprintf(path, sizeof(path), "sources/%d", i);
+        add_resource(ctx, h, path, handle_source_get, handle_source_post, NULL, handle_source_delete);
+        snprintf(path, sizeof(path), "curves/%d", i);
+        add_resource(ctx, h, path, handle_curve_get, NULL, handle_curve_put, handle_curve_delete);
+        snprintf(path, sizeof(path), "schedules/%d", i);
+        add_resource(ctx, h, path, handle_schedule_get, NULL, handle_schedule_put, handle_schedule_delete);
+    }
+
     /* /system/info */
     add_resource(ctx, h, "system/info", handle_system_get, NULL, NULL, NULL);
     /* /system/hostname */
