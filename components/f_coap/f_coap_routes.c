@@ -464,15 +464,32 @@ static void handle_schedule_get(coap_resource_t *resource,
                                 coap_pdu_t *resp)
 {
     struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
-    static ScheduleList list;
-    list = (ScheduleList)ScheduleList_init_default;
-    for (uint8_t i = 0; i < F_SCHEDULE_MAX_COUNT; i++) {
+    char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
+    int nseg = parse_segments(req, seg, COAP_MAX_SEG);
+
+    if (nseg >= 2) {
+        /* GET /schedules/{id} */
+        uint32_t id = (uint32_t)atoi(seg[1]);
         f_schedule_info_t si;
-        if (f_schedule_get_info(h->schedule, i, &si) == ESP_OK)
-            f_coap_schedule_to_pb(&si, &list.schedules[list.schedules_count++]);
+        if (f_schedule_get_info(h->schedule, (uint8_t)id, &si) != ESP_OK) {
+            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
+            return;
+        }
+        static ScheduleInfo pb;
+        f_coap_schedule_to_pb(&si, &pb);
+        encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &pb, &ScheduleInfo_msg);
+    } else {
+        /* GET /schedules — list all */
+        static ScheduleList list;
+        list = (ScheduleList)ScheduleList_init_default;
+        for (uint8_t i = 0; i < F_SCHEDULE_MAX_COUNT; i++) {
+            f_schedule_info_t si;
+            if (f_schedule_get_info(h->schedule, i, &si) == ESP_OK)
+                f_coap_schedule_to_pb(&si, &list.schedules[list.schedules_count++]);
+        }
+        encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &list,
+                        &ScheduleList_msg);
     }
-    encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &list,
-                    &ScheduleList_msg);
 }
 
 static void handle_schedule_post(coap_resource_t *resource,
@@ -773,6 +790,8 @@ void f_coap_register_resources(coap_context_t *ctx, struct f_coap *h)
 
     /* /sources — list (GET), create (POST) */
     add_resource(ctx, h, "sources", handle_source_get, handle_source_post, NULL, NULL);
+    /* /sources/temp — manual temperature update */
+    add_resource(ctx, h, "sources/temp", NULL, handle_source_post, NULL, NULL);
 
     /* /curves — list (GET), create (POST) */
     add_resource(ctx, h, "curves", handle_curve_get, handle_curve_post, NULL, NULL);
