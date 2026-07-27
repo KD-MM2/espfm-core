@@ -22,6 +22,7 @@ esp_err_t f_coap_init(f_coap_handle_t *handle, f_fan_handle_t fan,
                       f_mdns_handle_t mdns);
 esp_err_t f_coap_start(f_coap_handle_t handle);
 esp_err_t f_coap_stop(f_coap_handle_t handle);
+esp_err_t f_coap_deinit(f_coap_handle_t handle);
 
 #ifdef __cplusplus
 }
