@@ -12,8 +12,8 @@
 
 static const char *TAG = "f_config";
 
-#define CONFIG_FILENAME    "/littlefs/config.pb"
-#define SAVE_DEBOUNCE_US   3000000  /* 3 seconds */
+#define CONFIG_FILENAME     "/littlefs/config.pb"
+#define SAVE_DEBOUNCE_US    3000000 /* 3 seconds */
 #define CONFIG_ENC_BUF_SIZE 8192
 #define CONFIG_FILE_MAX     8192
 
@@ -24,7 +24,8 @@ struct f_config {
 };
 
 esp_err_t f_config_init(f_config_handle_t *handle, const char *partition_label,
-                        const char *mount_point) {
+                        const char *mount_point)
+{
     if (handle == NULL || partition_label == NULL || mount_point == NULL)
         return ESP_ERR_INVALID_ARG;
 
@@ -33,10 +34,10 @@ esp_err_t f_config_init(f_config_handle_t *handle, const char *partition_label,
     strncpy(h->partition_label, partition_label, sizeof(h->partition_label) - 1);
 
     esp_vfs_littlefs_conf_t conf = {
-        .base_path = mount_point,
-        .partition_label = partition_label,
+        .base_path              = mount_point,
+        .partition_label        = partition_label,
         .format_if_mount_failed = true,
-        .dont_mount = false,
+        .dont_mount             = false,
     };
     esp_err_t err = esp_vfs_littlefs_register(&conf);
     if (err != ESP_OK) {
@@ -44,7 +45,7 @@ esp_err_t f_config_init(f_config_handle_t *handle, const char *partition_label,
         free(h);
         return err;
     }
-    h->mounted = true;
+    h->mounted   = true;
 
     size_t total = 0, used = 0;
     esp_littlefs_info(partition_label, &total, &used);
@@ -58,9 +59,9 @@ esp_err_t f_config_init(f_config_handle_t *handle, const char *partition_label,
 /*  Save                                                               */
 /* ------------------------------------------------------------------ */
 
-esp_err_t f_config_save_all(f_config_handle_t handle, f_fan_handle_t fan,
-                            f_source_handle_t source, f_curve_handle_t curve,
-                            f_schedule_handle_t schedule) {
+esp_err_t f_config_save_all(f_config_handle_t handle, f_fan_handle_t fan, f_source_handle_t source,
+                            f_curve_handle_t curve, f_schedule_handle_t schedule)
+{
     if (handle == NULL || !handle->mounted) return ESP_ERR_INVALID_STATE;
 
     /* Debounce */
@@ -79,7 +80,7 @@ esp_err_t f_config_save_all(f_config_handle_t handle, f_fan_handle_t fan,
 
     /* Fans */
     cfg->has_fans = true;
-    cfg->fans = (FanList)FanList_init_default;
+    cfg->fans     = (FanList)FanList_init_default;
     if (fan) {
         for (uint8_t i = 0; i < F_FAN_MAX_COUNT; i++) {
             f_fan_info_t fi;
@@ -90,7 +91,7 @@ esp_err_t f_config_save_all(f_config_handle_t handle, f_fan_handle_t fan,
 
     /* Sources */
     cfg->has_sources = true;
-    cfg->sources = (SourceList)SourceList_init_default;
+    cfg->sources     = (SourceList)SourceList_init_default;
     if (source) {
         for (uint8_t i = 0; i < F_SOURCE_MAX_COUNT; i++) {
             f_source_info_t si;
@@ -101,7 +102,7 @@ esp_err_t f_config_save_all(f_config_handle_t handle, f_fan_handle_t fan,
 
     /* Curves */
     cfg->has_curves = true;
-    cfg->curves = (CurveList)CurveList_init_default;
+    cfg->curves     = (CurveList)CurveList_init_default;
     if (curve) {
         for (uint8_t i = 0; i < F_CURVE_MAX_COUNT; i++) {
             f_curve_info_t ci;
@@ -113,12 +114,12 @@ esp_err_t f_config_save_all(f_config_handle_t handle, f_fan_handle_t fan,
     /* Schedules */
     if (schedule != NULL) {
         cfg->has_schedules = true;
-        cfg->schedules = (ScheduleList)ScheduleList_init_default;
+        cfg->schedules     = (ScheduleList)ScheduleList_init_default;
         for (uint8_t i = 0; i < F_SCHEDULE_MAX_COUNT; i++) {
             f_schedule_info_t si;
             if (f_schedule_get_info(schedule, i, &si) == ESP_OK)
                 espfm_schedule_to_pb(&si,
-                    &cfg->schedules.schedules[cfg->schedules.schedules_count++]);
+                                     &cfg->schedules.schedules[cfg->schedules.schedules_count++]);
         }
     }
 
@@ -145,14 +146,16 @@ esp_err_t f_config_save_all(f_config_handle_t handle, f_fan_handle_t fan,
         return ESP_FAIL;
     }
 
-    size_t fan_n   = 0, src_n = 0, cur_n = 0, sched_n = 0;
-    if (fan)      fan_n   = f_fan_get_count(fan);
-    if (source)   src_n   = f_source_get_count(source);
-    if (curve)    cur_n   = f_curve_get_count(curve);
+    size_t fan_n = 0, src_n = 0, cur_n = 0, sched_n = 0;
+    if (fan) fan_n = f_fan_get_count(fan);
+    if (source) src_n = f_source_get_count(source);
+    if (curve) cur_n = f_curve_get_count(curve);
     if (schedule) sched_n = f_schedule_get_count(schedule);
 
-    ESP_LOGI(TAG, "Config saved as protobuf (%zu bytes, %zu fans, %zu sources, "
-             "%zu curves, %zu schedules)", enc_len, fan_n, src_n, cur_n, sched_n);
+    ESP_LOGI(TAG,
+             "Config saved as protobuf (%zu bytes, %zu fans, %zu sources, "
+             "%zu curves, %zu schedules)",
+             enc_len, fan_n, src_n, cur_n, sched_n);
     return ESP_OK;
 }
 
@@ -160,9 +163,9 @@ esp_err_t f_config_save_all(f_config_handle_t handle, f_fan_handle_t fan,
 /*  Load                                                               */
 /* ------------------------------------------------------------------ */
 
-esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan,
-                            f_source_handle_t source, f_curve_handle_t curve,
-                            f_schedule_handle_t schedule) {
+esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan, f_source_handle_t source,
+                            f_curve_handle_t curve, f_schedule_handle_t schedule)
+{
     if (handle == NULL || !handle->mounted) return ESP_ERR_INVALID_STATE;
 
     FILE *f = fopen(CONFIG_FILENAME, "r");
@@ -182,7 +185,10 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan,
     }
 
     uint8_t *buf = malloc((size_t)fsize);
-    if (buf == NULL) { fclose(f); return ESP_ERR_NO_MEM; }
+    if (buf == NULL) {
+        fclose(f);
+        return ESP_ERR_NO_MEM;
+    }
 
     size_t bytes_read = fread(buf, 1, (size_t)fsize, f);
     fclose(f);
@@ -194,8 +200,11 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan,
 
     /* Decode protobuf */
     ConfigFile *cfg = calloc(1, sizeof(ConfigFile));
-    if (cfg == NULL) { free(buf); return ESP_ERR_NO_MEM; }
-    *cfg = (ConfigFile)ConfigFile_init_default;
+    if (cfg == NULL) {
+        free(buf);
+        return ESP_ERR_NO_MEM;
+    }
+    *cfg            = (ConfigFile)ConfigFile_init_default;
 
     pb_istream_t is = pb_istream_from_buffer(buf, (size_t)fsize);
     if (!pb_decode(&is, &ConfigFile_msg, cfg)) {
@@ -215,8 +224,8 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan,
             if (f_constraints_gpio((int)pb->pwm_gpio, NULL) != ESP_OK) continue;
 
             uint8_t new_id;
-            if (f_fan_add(fan, (uint8_t)pb->pwm_gpio, (uint8_t)pb->tach_gpio,
-                          pb->name, &new_id) != ESP_OK)
+            if (f_fan_add(fan, (uint8_t)pb->pwm_gpio, (uint8_t)pb->tach_gpio, pb->name, &new_id) !=
+                ESP_OK)
                 continue;
 
             if (f_constraints_mode((int)pb->mode, NULL) == ESP_OK)
@@ -228,12 +237,9 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan,
             f_fan_set_group(fan, new_id, (uint8_t)pb->group_id);
             f_fan_set_inverted(fan, new_id, pb->inverted);
 
-            if (pb->source_id   != 0xFF) f_fan_set_source(fan, new_id,
-                                               (uint8_t)pb->source_id);
-            if (pb->curve_id    != 0xFF) f_fan_set_curve(fan, new_id,
-                                               (uint8_t)pb->curve_id);
-            if (pb->schedule_id != 0xFF) f_fan_set_schedule(fan, new_id,
-                                               (uint8_t)pb->schedule_id);
+            if (pb->source_id != 0xFF) f_fan_set_source(fan, new_id, (uint8_t)pb->source_id);
+            if (pb->curve_id != 0xFF) f_fan_set_curve(fan, new_id, (uint8_t)pb->curve_id);
+            if (pb->schedule_id != 0xFF) f_fan_set_schedule(fan, new_id, (uint8_t)pb->schedule_id);
 
             fan_count++;
         }
@@ -245,10 +251,11 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan,
             SourceInfo *pb = &cfg->sources.sources[i];
             /* Manual sources use gpio=255 (GPIO_NONE), skip GPIO validation */
             if (pb_to_source_type(pb->type) != SOURCE_TYPE_MANUAL &&
-                f_constraints_gpio((int)pb->gpio, NULL) != ESP_OK) continue;
+                f_constraints_gpio((int)pb->gpio, NULL) != ESP_OK)
+                continue;
             uint8_t new_id;
-            if (f_source_add(source, pb_to_source_type(pb->type),
-                             (uint8_t)pb->gpio, pb->name, &new_id) == ESP_OK) {
+            if (f_source_add(source, pb_to_source_type(pb->type), (uint8_t)pb->gpio, pb->name,
+                             &new_id) == ESP_OK) {
                 src_count++;
                 /* Restore manual temperature from saved config */
                 if (pb_to_source_type(pb->type) == SOURCE_TYPE_MANUAL && pb->temp_c != 0.0f)
@@ -266,37 +273,33 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan,
             ci.id = (uint8_t)pb->id;
             strncpy(ci.name, pb->name, sizeof(ci.name) - 1);
             ci.name[sizeof(ci.name) - 1] = '\0';
-            ci.num_points = pb->points_count;
+            ci.num_points                = pb->points_count;
             for (int j = 0; j < pb->points_count && j < F_CURVE_MAX_POINTS; j++) {
                 ci.points[j].temp_c = pb->points[j].temp_c;
                 ci.points[j].duty   = (uint8_t)pb->points[j].duty;
             }
             uint8_t out_id;
-            if (f_curve_upsert(curve, &ci, &out_id) == ESP_OK)
-                cur_count++;
+            if (f_curve_upsert(curve, &ci, &out_id) == ESP_OK) cur_count++;
         }
     }
 
     /* -- Schedules -- */
     if (cfg->has_schedules && schedule != NULL) {
         for (pb_size_t i = 0; i < cfg->schedules.schedules_count; i++) {
-            ScheduleInfo *pb = &cfg->schedules.schedules[i];
-            f_schedule_info_t si = {
-                .fan_id    = (uint8_t)pb->fan_id,
-                .duty      = (uint8_t)pb->duty,
-                .start_min = (uint16_t)pb->start_min,
-                .end_min   = (uint16_t)pb->end_min,
-                .enabled   = pb->enabled
-            };
+            ScheduleInfo *pb     = &cfg->schedules.schedules[i];
+            f_schedule_info_t si = {.fan_id    = (uint8_t)pb->fan_id,
+                                    .duty      = (uint8_t)pb->duty,
+                                    .start_min = (uint16_t)pb->start_min,
+                                    .end_min   = (uint16_t)pb->end_min,
+                                    .enabled   = pb->enabled};
             uint8_t out_id;
-            if (f_schedule_add(schedule, &si, &out_id) == ESP_OK)
-                sched_count++;
+            if (f_schedule_add(schedule, &si, &out_id) == ESP_OK) sched_count++;
         }
     }
 
     free(cfg);
 
-    ESP_LOGI(TAG, "Config loaded (%zu fans, %zu sources, %zu curves, %zu schedules)",
-             fan_count, src_count, cur_count, sched_count);
+    ESP_LOGI(TAG, "Config loaded (%zu fans, %zu sources, %zu curves, %zu schedules)", fan_count,
+             src_count, cur_count, sched_count);
     return ESP_OK;
 }

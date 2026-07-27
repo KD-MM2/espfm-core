@@ -24,13 +24,14 @@ struct f_provision {
     bool dns_running;
 };
 
-static esp_err_t _start_http_server(f_provision_handle_t handle) {
+static esp_err_t _start_http_server(f_provision_handle_t handle)
+{
     if (handle->http_server != NULL) {
         return ESP_OK;
     }
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.server_port = 80;
-    esp_err_t err = httpd_start(&handle->http_server, &config);
+    config.server_port    = 80;
+    esp_err_t err         = httpd_start(&handle->http_server, &config);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "HTTP server start failed: %s", esp_err_to_name(err));
         return err;
@@ -48,7 +49,8 @@ static esp_err_t _start_http_server(f_provision_handle_t handle) {
     return ESP_OK;
 }
 
-static void _stop_http_server(f_provision_handle_t handle) {
+static void _stop_http_server(f_provision_handle_t handle)
+{
     if (handle->http_server != NULL) {
         httpd_stop(handle->http_server);
         handle->http_server = NULL;
@@ -56,7 +58,8 @@ static void _stop_http_server(f_provision_handle_t handle) {
     }
 }
 
-static esp_err_t _start_dns_server(f_provision_handle_t handle) {
+static esp_err_t _start_dns_server(f_provision_handle_t handle)
+{
     esp_err_t err = f_provision_dns_start();
     if (err != ESP_OK) {
         return err;
@@ -65,14 +68,16 @@ static esp_err_t _start_dns_server(f_provision_handle_t handle) {
     return ESP_OK;
 }
 
-static void _stop_dns_server(f_provision_handle_t handle) {
+static void _stop_dns_server(f_provision_handle_t handle)
+{
     if (handle->dns_running) {
         f_provision_dns_stop();
         handle->dns_running = false;
     }
 }
 
-static esp_err_t _start_provisioning(f_provision_handle_t handle) {
+static esp_err_t _start_provisioning(f_provision_handle_t handle)
+{
     if (handle->state == PROV_STATE_PROVISIONING) {
         ESP_LOGD(TAG, "Already provisioning, skipping");
         return ESP_OK;
@@ -94,15 +99,17 @@ static esp_err_t _start_provisioning(f_provision_handle_t handle) {
     return ESP_OK;
 }
 
-static void _stop_provisioning(f_provision_handle_t handle) {
+static void _stop_provisioning(f_provision_handle_t handle)
+{
     _stop_http_server(handle);
     _stop_dns_server(handle);
     handle->state = PROV_STATE_IDLE;
     ESP_LOGI(TAG, "Provisioning stopped");
 }
 
-static void _event_handler(void *arg, esp_event_base_t event_base,
-                           int32_t event_id, void *event_data) {
+static void _event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
+                           void *event_data)
+{
     f_provision_handle_t handle = (f_provision_handle_t)arg;
 
     if (event_base == ESPFM_EVENT) {
@@ -130,17 +137,18 @@ static void _event_handler(void *arg, esp_event_base_t event_base,
     }
 }
 
-esp_err_t f_provision_init(f_provision_handle_t *handle, f_wifi_handle_t wifi) {
+esp_err_t f_provision_init(f_provision_handle_t *handle, f_wifi_handle_t wifi)
+{
     if (handle == NULL || wifi == NULL) return ESP_ERR_INVALID_ARG;
 
     f_provision_handle_t h = calloc(1, sizeof(struct f_provision));
     if (h == NULL) return ESP_ERR_NO_MEM;
 
-    h->wifi = wifi;
-    h->state = PROV_STATE_IDLE;
+    h->wifi       = wifi;
+    h->state      = PROV_STATE_IDLE;
 
-    esp_err_t err = esp_event_handler_instance_register(
-        ESPFM_EVENT, ESP_EVENT_ANY_ID, &_event_handler, h, &h->event_instance);
+    esp_err_t err = esp_event_handler_instance_register(ESPFM_EVENT, ESP_EVENT_ANY_ID,
+                                                        &_event_handler, h, &h->event_instance);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Event handler register failed: %s", esp_err_to_name(err));
         goto cleanup;
@@ -155,14 +163,16 @@ cleanup:
     return err;
 }
 
-esp_err_t f_provision_start(f_provision_handle_t handle) {
+esp_err_t f_provision_start(f_provision_handle_t handle)
+{
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
 
     ESP_LOGI(TAG, "Manual provisioning trigger");
     return _start_provisioning(handle);
 }
 
-esp_err_t f_provision_stop(f_provision_handle_t handle) {
+esp_err_t f_provision_stop(f_provision_handle_t handle)
+{
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
 
     if (handle->state != PROV_STATE_PROVISIONING) {

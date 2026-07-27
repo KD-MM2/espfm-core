@@ -10,7 +10,10 @@ extern "C" {
 #define F_CURVE_MAX_POINTS 10
 #define F_CURVE_MAX_COUNT  16
 
-typedef struct { float temp_c; uint8_t duty; } f_curve_point_t;
+typedef struct {
+    float temp_c;
+    uint8_t duty;
+} f_curve_point_t;
 
 typedef struct {
     uint8_t id;

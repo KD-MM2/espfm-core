@@ -30,7 +30,8 @@ struct f_wifi {
 };
 
 /* Deferred AP stop — called from timer context (safe to call WiFi APIs) */
-static void _ap_stop_timer_cb(TimerHandle_t timer) {
+static void _ap_stop_timer_cb(TimerHandle_t timer)
+{
     f_wifi_handle_t wifi = (f_wifi_handle_t)pvTimerGetTimerID(timer);
     if (!wifi || !wifi->ap_active) return;
 
@@ -43,26 +44,28 @@ static void _ap_stop_timer_cb(TimerHandle_t timer) {
     }
 }
 
-static void _start_sntp(void) {
+static void _start_sntp(void)
+{
     esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
     esp_sntp_setservername(0, "pool.ntp.org");
     esp_sntp_init();
     ESP_LOGI(TAG, "SNTP started (non-blocking)");
 }
 
-static void _event_handler(void *arg, esp_event_base_t event_base,
-                           int32_t event_id, void *event_data) {
+static void _event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
+                           void *event_data)
+{
     f_wifi_handle_t wifi = (f_wifi_handle_t)arg;
 
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_START) {
-        wifi->ap_active = true;
+        wifi->ap_active       = true;
         esp_netif_t *ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
         if (ap_netif) {
             esp_netif_ip_info_t ip_info;
-            ip_info.ip.addr = ipaddr_addr(AP_IP);
-            ip_info.gw.addr = ipaddr_addr(AP_IP);
+            ip_info.ip.addr      = ipaddr_addr(AP_IP);
+            ip_info.gw.addr      = ipaddr_addr(AP_IP);
             ip_info.netmask.addr = ipaddr_addr("255.255.255.0");
             esp_netif_dhcps_stop(ap_netif);
             esp_netif_set_ip_info(ap_netif, &ip_info);
@@ -90,11 +93,10 @@ static void _event_handler(void *arg, esp_event_base_t event_base,
         } /* else: already failed, ignore subsequent disconnects */
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-        snprintf(wifi->ip_str, sizeof(wifi->ip_str),
-                 IPSTR, IP2STR(&event->ip_info.ip));
-        wifi->connected = true;
+        snprintf(wifi->ip_str, sizeof(wifi->ip_str), IPSTR, IP2STR(&event->ip_info.ip));
+        wifi->connected     = true;
         wifi->sta_connected = true;
-        wifi->retry_count = 0;
+        wifi->retry_count   = 0;
         xEventGroupSetBits(wifi->event_group, WIFI_CONNECTED_BIT);
         esp_event_post(ESPFM_EVENT, ESPFM_EVENT_WIFI_CONNECTED, NULL, 0, pdMS_TO_TICKS(100));
         ESP_LOGI(TAG, "STA connected, IP: %s", wifi->ip_str);
@@ -108,7 +110,8 @@ static void _event_handler(void *arg, esp_event_base_t event_base,
     }
 }
 
-esp_err_t f_wifi_init(f_wifi_handle_t *handle) {
+esp_err_t f_wifi_init(f_wifi_handle_t *handle)
+{
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
 
     f_wifi_handle_t wifi = calloc(1, sizeof(struct f_wifi));
@@ -121,8 +124,8 @@ esp_err_t f_wifi_init(f_wifi_handle_t *handle) {
     }
 
     /* Create one-shot timer for deferred AP stop */
-    wifi->ap_stop_timer = xTimerCreate("ap_stop", pdMS_TO_TICKS(2000),
-                                        pdFALSE, wifi, _ap_stop_timer_cb);
+    wifi->ap_stop_timer =
+        xTimerCreate("ap_stop", pdMS_TO_TICKS(2000), pdFALSE, wifi, _ap_stop_timer_cb);
 
     esp_err_t netif_err = esp_netif_init();
     if (netif_err != ESP_OK && netif_err != ESP_ERR_INVALID_STATE) {
@@ -141,8 +144,10 @@ esp_err_t f_wifi_init(f_wifi_handle_t *handle) {
     if (load_err != ESP_OK || sta_config.sta.ssid[0] == '\0') {
         /* No saved config — use Kconfig defaults */
         memset(&sta_config, 0, sizeof(sta_config));
-        strncpy((char *)sta_config.sta.ssid, CONFIG_ESPFM_WIFI_SSID, sizeof(sta_config.sta.ssid) - 1);
-        strncpy((char *)sta_config.sta.password, CONFIG_ESPFM_WIFI_PASSWORD, sizeof(sta_config.sta.password) - 1);
+        strncpy((char *)sta_config.sta.ssid, CONFIG_ESPFM_WIFI_SSID,
+                sizeof(sta_config.sta.ssid) - 1);
+        strncpy((char *)sta_config.sta.password, CONFIG_ESPFM_WIFI_PASSWORD,
+                sizeof(sta_config.sta.password) - 1);
         sta_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
         ESP_LOGI(TAG, "WiFi STA using Kconfig defaults: %s", CONFIG_ESPFM_WIFI_SSID);
     } else {
@@ -158,51 +163,56 @@ esp_err_t f_wifi_init(f_wifi_handle_t *handle) {
     esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
 
     wifi_config_t ap_config = {
-        .ap = {
-            .max_connection = 4,
-            .authmode = WIFI_AUTH_WPA2_PSK,
-            .pmf_cfg = {
-                .capable = true,
-                .required = false,
+        .ap =
+            {
+                .max_connection = 4,
+                .authmode       = WIFI_AUTH_WPA2_PSK,
+                .pmf_cfg =
+                    {
+                        .capable  = true,
+                        .required = false,
+                    },
             },
-        },
     };
     strncpy((char *)ap_config.ap.password, CONFIG_ESPFM_AP_PASSWORD,
             sizeof(ap_config.ap.password) - 1);
     ESP_LOGI(TAG, "AP password set from Kconfig (WPA2-PSK)");
-    snprintf((char *)ap_config.ap.ssid, sizeof(ap_config.ap.ssid),
-             "ESPFM-%02X%02X", mac[4], mac[5]);
+    snprintf((char *)ap_config.ap.ssid, sizeof(ap_config.ap.ssid), "ESPFM-%02X%02X", mac[4],
+             mac[5]);
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta_config));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "WiFi APSTA mode — STA:'%s'  AP:'%s' (WPA2-PSK)",
-             CONFIG_ESPFM_WIFI_SSID, ap_config.ap.ssid);
+    ESP_LOGI(TAG, "WiFi APSTA mode — STA:'%s'  AP:'%s' (WPA2-PSK)", CONFIG_ESPFM_WIFI_SSID,
+             ap_config.ap.ssid);
     *handle = wifi;
     return ESP_OK;
 }
 
-esp_err_t f_wifi_wait_connected(f_wifi_handle_t handle, TickType_t timeout) {
+esp_err_t f_wifi_wait_connected(f_wifi_handle_t handle, TickType_t timeout)
+{
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
-    EventBits_t bits = xEventGroupWaitBits(
-        handle->event_group, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, timeout);
+    EventBits_t bits =
+        xEventGroupWaitBits(handle->event_group, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, timeout);
 
     if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "%s, IP: %s",
-                 handle->sta_connected ? "STA connected" : "AP mode", handle->ip_str);
+        ESP_LOGI(TAG, "%s, IP: %s", handle->sta_connected ? "STA connected" : "AP mode",
+                 handle->ip_str);
         return ESP_OK;
     }
     ESP_LOGE(TAG, "WiFi startup timeout");
     return ESP_ERR_TIMEOUT;
 }
 
-bool f_wifi_is_connected(f_wifi_handle_t handle) {
+bool f_wifi_is_connected(f_wifi_handle_t handle)
+{
     return handle != NULL && handle->connected;
 }
 
-esp_err_t f_wifi_get_ip_str(f_wifi_handle_t handle, char *buf, size_t len) {
+esp_err_t f_wifi_get_ip_str(f_wifi_handle_t handle, char *buf, size_t len)
+{
     if (handle == NULL || buf == NULL || len == 0) return ESP_ERR_INVALID_ARG;
     strncpy(buf, handle->ip_str, len - 1);
     buf[len - 1] = '\0';

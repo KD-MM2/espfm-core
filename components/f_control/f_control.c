@@ -9,12 +9,12 @@
 static const char *TAG = "f_control";
 
 #define CONTROL_PERIOD_MS  CONFIG_ESPFM_CONTROL_PERIOD_MS
-#define CONTROL_PRIORITY    3
-#define CONTROL_STACK       4096
-#define DEFAULT_HYSTERESIS  3
-#define DEFAULT_RAMP_UP     10
-#define DEFAULT_RAMP_DOWN   3
-#define DEFAULT_SAFE_DUTY   50
+#define CONTROL_PRIORITY   3
+#define CONTROL_STACK      4096
+#define DEFAULT_HYSTERESIS 3
+#define DEFAULT_RAMP_UP    10
+#define DEFAULT_RAMP_DOWN  3
+#define DEFAULT_SAFE_DUTY  50
 
 struct f_control {
     f_fan_handle_t fan;
@@ -35,14 +35,15 @@ struct f_control {
 
 /* --- Private helpers --- */
 
-static uint8_t apply_hysteresis(uint8_t current, uint8_t target, uint8_t threshold) {
+static uint8_t apply_hysteresis(uint8_t current, uint8_t target, uint8_t threshold)
+{
     int diff = (int)target - (int)current;
     if (abs(diff) <= (int)threshold) return current;
     return target;
 }
 
-static uint8_t apply_ramp(uint8_t current, uint8_t target,
-                           uint8_t max_up, uint8_t max_down) {
+static uint8_t apply_ramp(uint8_t current, uint8_t target, uint8_t max_up, uint8_t max_down)
+{
     if (target > current) {
         return (target - current > max_up) ? (current + max_up) : target;
     } else if (target < current) {
@@ -51,7 +52,8 @@ static uint8_t apply_ramp(uint8_t current, uint8_t target,
     return current;
 }
 
-static void _ctrl_callback(const f_fan_info_t *fan, void *ctx) {
+static void _ctrl_callback(const f_fan_info_t *fan, void *ctx)
+{
     f_control_handle_t ctrl = (f_control_handle_t)ctx;
     if (!fan->enabled) return;
 
@@ -66,8 +68,8 @@ static void _ctrl_callback(const f_fan_info_t *fan, void *ctx) {
     if (info.duty > 0 && info.rpm == 0) {
         ctrl->stall_counter[fan->id]++;
         if (ctrl->stall_counter[fan->id] >= 3) {
-            ESP_LOGW(TAG, "Fan %d STALL alarm (duty=%d%%, rpm=0 for %d ticks)",
-                     fan->id, info.duty, ctrl->stall_counter[fan->id]);
+            ESP_LOGW(TAG, "Fan %d STALL alarm (duty=%d%%, rpm=0 for %d ticks)", fan->id, info.duty,
+                     ctrl->stall_counter[fan->id]);
             new_alarm = FAN_ALARM_STALL;
         }
     } else {
@@ -94,17 +96,17 @@ static void _ctrl_callback(const f_fan_info_t *fan, void *ctx) {
     if (err != ESP_OK || status == SOURCE_STATUS_INVALID) {
         /* 2. Fail-safe */
         switch (ctrl->failsafe_policy) {
-            case FAILSAFE_HOLD:
-                break;
-            case FAILSAFE_FULL_SPEED:
-                f_fan_set_duty(ctrl->fan, fan->id, 100);
-                break;
-            case FAILSAFE_SAFE_DUTY:
-                f_fan_set_duty(ctrl->fan, fan->id, ctrl->failsafe_safe_duty);
-                break;
-            case FAILSAFE_ALT_SOURCE:
-                /* TODO: alt source not yet implemented */
-                break;
+        case FAILSAFE_HOLD:
+            break;
+        case FAILSAFE_FULL_SPEED:
+            f_fan_set_duty(ctrl->fan, fan->id, 100);
+            break;
+        case FAILSAFE_SAFE_DUTY:
+            f_fan_set_duty(ctrl->fan, fan->id, ctrl->failsafe_safe_duty);
+            break;
+        case FAILSAFE_ALT_SOURCE:
+            /* TODO: alt source not yet implemented */
+            break;
         }
         esp_event_post(ESPFM_EVENT, ESPFM_EVENT_SOURCE_INVALID, NULL, 0, 0);
         goto check_alarm;
@@ -117,7 +119,7 @@ static void _ctrl_callback(const f_fan_info_t *fan, void *ctx) {
     }
 
     /* 4. Apply hysteresis + ramp-up/down */
-    uint8_t current = ctrl->prev_duty[fan->id];
+    uint8_t current    = ctrl->prev_duty[fan->id];
     uint8_t after_hyst = apply_hysteresis(current, target_duty, ctrl->hysteresis_pct);
     uint8_t final_duty = apply_ramp(current, after_hyst, ctrl->ramp_up_pct, ctrl->ramp_down_pct);
 
@@ -126,8 +128,8 @@ static void _ctrl_callback(const f_fan_info_t *fan, void *ctx) {
 
     /* Over-temp: check if source temp exceeds threshold */
     if (status == SOURCE_STATUS_VALID && temp_c > (float)CONFIG_ESPFM_OVERTEMP_THRESHOLD_C) {
-        ESP_LOGW(TAG, "Fan %d OVER-TEMP alarm (%.1fC > %dC)",
-                 fan->id, temp_c, CONFIG_ESPFM_OVERTEMP_THRESHOLD_C);
+        ESP_LOGW(TAG, "Fan %d OVER-TEMP alarm (%.1fC > %dC)", fan->id, temp_c,
+                 CONFIG_ESPFM_OVERTEMP_THRESHOLD_C);
         new_alarm = FAN_ALARM_OVERTEMP;
     }
 
@@ -141,11 +143,11 @@ check_alarm:
     ctrl->prev_alarm[fan->id] = new_alarm;
 }
 
-static void _ctrl_task(void *arg) {
+static void _ctrl_task(void *arg)
+{
     f_control_handle_t ctrl = (f_control_handle_t)arg;
     ESP_LOGI(TAG, "Control loop started (period=%dms, hysteresis=%d%%, ramp=%d%%↑/%d%%↓)",
-             CONTROL_PERIOD_MS, ctrl->hysteresis_pct,
-             ctrl->ramp_up_pct, ctrl->ramp_down_pct);
+             CONTROL_PERIOD_MS, ctrl->hysteresis_pct, ctrl->ramp_up_pct, ctrl->ramp_down_pct);
 
     while (ctrl->running) {
         /* Identify group masters (lowest ID per group) */
@@ -184,34 +186,36 @@ static void _ctrl_task(void *arg) {
 
 /* --- Public API --- */
 
-esp_err_t f_control_init(f_control_handle_t *handle, f_fan_handle_t fan,
-                         f_source_handle_t source, f_curve_handle_t curve) {
+esp_err_t f_control_init(f_control_handle_t *handle, f_fan_handle_t fan, f_source_handle_t source,
+                         f_curve_handle_t curve)
+{
     if (handle == NULL || fan == NULL) return ESP_ERR_INVALID_ARG;
 
     f_control_handle_t ctrl = calloc(1, sizeof(struct f_control));
     if (ctrl == NULL) return ESP_ERR_NO_MEM;
 
-    ctrl->fan = fan;
-    ctrl->source = source;
-    ctrl->curve = curve;
-    ctrl->hysteresis_pct = DEFAULT_HYSTERESIS;
-    ctrl->ramp_up_pct = DEFAULT_RAMP_UP;
-    ctrl->ramp_down_pct = DEFAULT_RAMP_DOWN;
-    ctrl->failsafe_policy = FAILSAFE_SAFE_DUTY;
+    ctrl->fan                = fan;
+    ctrl->source             = source;
+    ctrl->curve              = curve;
+    ctrl->hysteresis_pct     = DEFAULT_HYSTERESIS;
+    ctrl->ramp_up_pct        = DEFAULT_RAMP_UP;
+    ctrl->ramp_down_pct      = DEFAULT_RAMP_DOWN;
+    ctrl->failsafe_policy    = FAILSAFE_SAFE_DUTY;
     ctrl->failsafe_safe_duty = DEFAULT_SAFE_DUTY;
 
-    *handle = ctrl;
+    *handle                  = ctrl;
     ESP_LOGI(TAG, "Control engine initialized");
     return ESP_OK;
 }
 
-esp_err_t f_control_start(f_control_handle_t handle) {
+esp_err_t f_control_start(f_control_handle_t handle)
+{
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
     if (handle->running) return ESP_OK;
 
     handle->running = true;
-    BaseType_t ret = xTaskCreate(_ctrl_task, "ctrl_loop", CONTROL_STACK,
-                                  handle, CONTROL_PRIORITY, &handle->task);
+    BaseType_t ret  = xTaskCreate(_ctrl_task, "ctrl_loop", CONTROL_STACK, handle, CONTROL_PRIORITY,
+                                  &handle->task);
     if (ret != pdPASS) {
         handle->running = false;
         return ESP_ERR_NO_MEM;
@@ -219,30 +223,33 @@ esp_err_t f_control_start(f_control_handle_t handle) {
     return ESP_OK;
 }
 
-esp_err_t f_control_stop(f_control_handle_t handle) {
+esp_err_t f_control_stop(f_control_handle_t handle)
+{
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
     handle->running = false;
     /* Task will exit on next loop iteration */
     return ESP_OK;
 }
 
-esp_err_t f_control_set_hysteresis(f_control_handle_t handle, uint8_t threshold_pct) {
+esp_err_t f_control_set_hysteresis(f_control_handle_t handle, uint8_t threshold_pct)
+{
     if (handle == NULL || threshold_pct > 100) return ESP_ERR_INVALID_ARG;
     handle->hysteresis_pct = threshold_pct;
     return ESP_OK;
 }
 
-esp_err_t f_control_set_ramp_rates(f_control_handle_t handle,
-                                    uint8_t max_up_pct, uint8_t max_down_pct) {
-    if (handle == NULL || max_up_pct > 100 || max_down_pct > 100)
-        return ESP_ERR_INVALID_ARG;
-    handle->ramp_up_pct = max_up_pct;
+esp_err_t f_control_set_ramp_rates(f_control_handle_t handle, uint8_t max_up_pct,
+                                   uint8_t max_down_pct)
+{
+    if (handle == NULL || max_up_pct > 100 || max_down_pct > 100) return ESP_ERR_INVALID_ARG;
+    handle->ramp_up_pct   = max_up_pct;
     handle->ramp_down_pct = max_down_pct;
     return ESP_OK;
 }
 
-esp_err_t f_control_set_failsafe(f_control_handle_t handle,
-                                  failsafe_policy_t policy, uint8_t safe_duty) {
+esp_err_t f_control_set_failsafe(f_control_handle_t handle, failsafe_policy_t policy,
+                                 uint8_t safe_duty)
+{
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
     handle->failsafe_policy = policy;
     if (safe_duty <= 100) handle->failsafe_safe_duty = safe_duty;

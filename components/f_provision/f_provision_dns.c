@@ -8,18 +8,18 @@
 
 static const char *TAG = "f_provision_dns";
 
-#define DNS_PORT        53
-#define DNS_BUF_SIZE    512
-#define DNS_FLAG_QR     0x8000  /* Response flag */
-#define DNS_FLAG_AA     0x0400  /* Authoritative answer */
-#define DNS_TYPE_A      1
-#define DNS_CLASS_IN    1
-#define DNS_TTL_SEC     60
+#define DNS_PORT     53
+#define DNS_BUF_SIZE 512
+#define DNS_FLAG_QR  0x8000 /* Response flag */
+#define DNS_FLAG_AA  0x0400 /* Authoritative answer */
+#define DNS_TYPE_A   1
+#define DNS_CLASS_IN 1
+#define DNS_TTL_SEC  60
 
 /* Captive portal IP address: 192.168.4.1 */
 static const uint8_t CAPTIVE_IP[4] = {192, 168, 4, 1};
 
-static struct udp_pcb *s_dns_pcb = NULL;
+static struct udp_pcb *s_dns_pcb   = NULL;
 
 /**
  * @brief Build a DNS response that answers any A-record query with 192.168.4.1.
@@ -29,8 +29,9 @@ static struct udp_pcb *s_dns_pcb = NULL;
  *   - Question section: copied verbatim from request
  *   - Answer section: name pointer (0xC00C), type A, class IN, TTL, RDLENGTH=4, RDATA
  */
-static void _dns_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p,
-                          const ip_addr_t *addr, u16_t port) {
+static void _dns_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr,
+                         u16_t port)
+{
     if (p == NULL) return;
 
     /* Minimum DNS query: 12-byte header + at least 1 byte for name + 4 bytes QTYPE+QCLASS */
@@ -41,7 +42,7 @@ static void _dns_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     }
 
     const uint8_t *query = (const uint8_t *)p->payload;
-    uint16_t qdcount = ((uint16_t)query[4] << 8) | query[5];
+    uint16_t qdcount     = ((uint16_t)query[4] << 8) | query[5];
 
     /* Only handle single-question queries */
     if (qdcount != 1) {
@@ -82,10 +83,10 @@ name_done:
 
     /* Copy header, set QR=1 (response), ANCOUNT=1 */
     memcpy(resp, query, 12);
-    resp[2] = (uint8_t)((query[2] | 0x80));  /* Set QR bit */
-    resp[3] = (uint8_t)((query[3] | 0x04));  /* Set AA bit (authoritative) */
-    resp[6] = 0x00;  /* ANCOUNT high byte */
-    resp[7] = 0x01;  /* ANCOUNT = 1 */
+    resp[2] = (uint8_t)((query[2] | 0x80)); /* Set QR bit */
+    resp[3] = (uint8_t)((query[3] | 0x04)); /* Set AA bit (authoritative) */
+    resp[6] = 0x00;                         /* ANCOUNT high byte */
+    resp[7] = 0x01;                         /* ANCOUNT = 1 */
     /* NSCOUNT = 0, ARCOUNT = 0 (already zeroed) */
 
     /* Copy question section */
@@ -128,10 +129,9 @@ name_done:
         memcpy(resp_pbuf->payload, resp, resp_len);
         udp_sendto(pcb, resp_pbuf, addr, port);
         pbuf_free(resp_pbuf);
-        ESP_LOGD(TAG, "DNS redirect -> %u.%u.%u.%u (query from %u.%u.%u.%u:%u)",
-                 CAPTIVE_IP[0], CAPTIVE_IP[1], CAPTIVE_IP[2], CAPTIVE_IP[3],
-                 ip4_addr1(ip_2_ip4(addr)), ip4_addr2(ip_2_ip4(addr)),
-                 ip4_addr3(ip_2_ip4(addr)), ip4_addr4(ip_2_ip4(addr)),
+        ESP_LOGD(TAG, "DNS redirect -> %u.%u.%u.%u (query from %u.%u.%u.%u:%u)", CAPTIVE_IP[0],
+                 CAPTIVE_IP[1], CAPTIVE_IP[2], CAPTIVE_IP[3], ip4_addr1(ip_2_ip4(addr)),
+                 ip4_addr2(ip_2_ip4(addr)), ip4_addr3(ip_2_ip4(addr)), ip4_addr4(ip_2_ip4(addr)),
                  (unsigned)port);
     } else {
         ESP_LOGW(TAG, "Failed to allocate DNS response pbuf");
@@ -140,7 +140,8 @@ name_done:
     pbuf_free(p);
 }
 
-esp_err_t f_provision_dns_start(void) {
+esp_err_t f_provision_dns_start(void)
+{
     if (s_dns_pcb != NULL) {
         ESP_LOGW(TAG, "DNS server already running");
         return ESP_ERR_INVALID_STATE;
@@ -162,12 +163,13 @@ esp_err_t f_provision_dns_start(void) {
 
     udp_recv(s_dns_pcb, _dns_recv_cb, NULL);
 
-    ESP_LOGI(TAG, "DNS redirect server started on port %d -> %u.%u.%u.%u",
-             DNS_PORT, CAPTIVE_IP[0], CAPTIVE_IP[1], CAPTIVE_IP[2], CAPTIVE_IP[3]);
+    ESP_LOGI(TAG, "DNS redirect server started on port %d -> %u.%u.%u.%u", DNS_PORT, CAPTIVE_IP[0],
+             CAPTIVE_IP[1], CAPTIVE_IP[2], CAPTIVE_IP[3]);
     return ESP_OK;
 }
 
-void f_provision_dns_stop(void) {
+void f_provision_dns_stop(void)
+{
     if (s_dns_pcb != NULL) {
         udp_remove(s_dns_pcb);
         s_dns_pcb = NULL;

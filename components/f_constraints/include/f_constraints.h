@@ -10,18 +10,18 @@ extern "C" {
 #endif
 
 /* --- Named Limits --- */
-#define F_CONSTRAINT_DUTY_MIN          0
-#define F_CONSTRAINT_DUTY_MAX        100
-#define F_CONSTRAINT_MODE_MIN          0
-#define F_CONSTRAINT_MODE_MAX          1
-#define F_CONSTRAINT_GPIO_MIN          0
+#define F_CONSTRAINT_DUTY_MIN         0
+#define F_CONSTRAINT_DUTY_MAX         100
+#define F_CONSTRAINT_MODE_MIN         0
+#define F_CONSTRAINT_MODE_MAX         1
+#define F_CONSTRAINT_GPIO_MIN         0
 #define F_CONSTRAINT_GPIO_MAX         48
-#define F_CONSTRAINT_TEMP_C_MIN     -40.0f
-#define F_CONSTRAINT_TEMP_C_MAX     125.0f
-#define F_CONSTRAINT_SCHED_MIN         0
-#define F_CONSTRAINT_SCHED_MAX      1439
-#define F_CONSTRAINT_CURVE_POINTS_MIN  2
-#define F_CONSTRAINT_NAME_MAX_LEN      ESPFM_NAME_MAX
+#define F_CONSTRAINT_TEMP_C_MIN       -40.0f
+#define F_CONSTRAINT_TEMP_C_MAX       125.0f
+#define F_CONSTRAINT_SCHED_MIN        0
+#define F_CONSTRAINT_SCHED_MAX        1439
+#define F_CONSTRAINT_CURVE_POINTS_MIN 2
+#define F_CONSTRAINT_NAME_MAX_LEN     ESPFM_NAME_MAX
 
 /* --- Validation ---
    Each returns ESP_OK or ESP_ERR_INVALID_ARG.

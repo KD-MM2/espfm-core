@@ -11,12 +11,12 @@
 #include <ctype.h>
 #include <stdlib.h>
 
-static const char *TAG = "f_mdns";
+static const char *TAG           = "f_mdns";
 static struct f_mdns *s_instance = NULL;
 
-#define NVS_NAMESPACE   "mdns"
+#define NVS_NAMESPACE    "mdns"
 #define NVS_KEY_HOSTNAME "hostname"
-#define MDNS_INSTANCE   "ESPFM Fan Controller"
+#define MDNS_INSTANCE    "ESPFM Fan Controller"
 
 struct f_mdns {
     char hostname[64];
@@ -27,7 +27,8 @@ struct f_mdns {
 
 /* --- Hostname helpers --- */
 
-static bool validate_hostname(const char *name) {
+static bool validate_hostname(const char *name)
+{
     if (!name || name[0] == '\0') return false;
     size_t len = strlen(name);
     if (len > 63) return false;
@@ -39,13 +40,15 @@ static bool validate_hostname(const char *name) {
     return true;
 }
 
-static void generate_default_hostname(char *buf, size_t len) {
+static void generate_default_hostname(char *buf, size_t len)
+{
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
     snprintf(buf, len, "espfm-%02x%02x", mac[4], mac[5]);
 }
 
-static void load_hostname(struct f_mdns *h) {
+static void load_hostname(struct f_mdns *h)
+{
     nvs_handle_t nvs;
     if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs) == ESP_OK) {
         size_t sizeof_hostname = sizeof(h->hostname);
@@ -62,7 +65,8 @@ static void load_hostname(struct f_mdns *h) {
 
 /* --- mDNS lifecycle --- */
 
-static void start_mdns(struct f_mdns *h) {
+static void start_mdns(struct f_mdns *h)
+{
     if (h->running) return;
 
     esp_err_t err = mdns_init();
@@ -78,7 +82,7 @@ static void start_mdns(struct f_mdns *h) {
     mdns_service_add(NULL, "_coap", "_udp", 5683, NULL, 0);
 
     /* _http._tcp — HTTP/provisioning */
-    mdns_txt_item_t http_txt[] = { { "path", "/" } };
+    mdns_txt_item_t http_txt[] = {{"path", "/"}};
     mdns_service_add(NULL, "_http", "_tcp", 80, http_txt, 1);
 
     /* _espfm._tcp — custom device info */
@@ -90,8 +94,8 @@ static void start_mdns(struct f_mdns *h) {
     snprintf(fw_str, sizeof(fw_str), "dev");
 #endif
     mdns_txt_item_t espfm_txt[] = {
-        { "version", ver_str },
-        { "fw", fw_str },
+        {"version", ver_str},
+        {"fw", fw_str},
     };
     mdns_service_add(NULL, "_espfm", "_tcp", 5683, espfm_txt, 2);
 
@@ -99,7 +103,8 @@ static void start_mdns(struct f_mdns *h) {
     ESP_LOGI(TAG, "mDNS started: %s.local [coap:5683 http:80 espfm:5683]", h->hostname);
 }
 
-static void stop_mdns(struct f_mdns *h) {
+static void stop_mdns(struct f_mdns *h)
+{
     if (!h->running) return;
     mdns_free();
     h->running = false;
@@ -108,8 +113,8 @@ static void stop_mdns(struct f_mdns *h) {
 
 /* --- Event handler --- */
 
-static void on_wifi_event(void *arg, esp_event_base_t base,
-                          int32_t id, void *data) {
+static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
+{
     struct f_mdns *h = (struct f_mdns *)arg;
     if (!h) return;
 
@@ -124,7 +129,8 @@ static void on_wifi_event(void *arg, esp_event_base_t base,
 
 /* --- Public API --- */
 
-esp_err_t f_mdns_init(f_mdns_handle_t *handle) {
+esp_err_t f_mdns_init(f_mdns_handle_t *handle)
+{
     if (!handle) return ESP_ERR_INVALID_ARG;
 
     struct f_mdns *h = calloc(1, sizeof(*h));
@@ -134,19 +140,16 @@ esp_err_t f_mdns_init(f_mdns_handle_t *handle) {
     esp_netif_set_hostname(esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"), h->hostname);
 
     esp_err_t err;
-    err = esp_event_handler_register(ESPFM_EVENT, ESPFM_EVENT_WIFI_CONNECTED,
-                                     on_wifi_event, h);
+    err = esp_event_handler_register(ESPFM_EVENT, ESPFM_EVENT_WIFI_CONNECTED, on_wifi_event, h);
     if (err != ESP_OK) goto cleanup;
-    err = esp_event_handler_register(ESPFM_EVENT, ESPFM_EVENT_WIFI_DISCONNECTED,
-                                     on_wifi_event, h);
+    err = esp_event_handler_register(ESPFM_EVENT, ESPFM_EVENT_WIFI_DISCONNECTED, on_wifi_event, h);
     if (err != ESP_OK) goto cleanup;
-    err = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_AP_START,
-                                     on_wifi_event, h);
+    err = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_AP_START, on_wifi_event, h);
     if (err != ESP_OK) goto cleanup;
 
     h->running = false;
     s_instance = h;
-    *handle = h;
+    *handle    = h;
     ESP_LOGI(TAG, "mDNS initialized (hostname: %s.local)", h->hostname);
     return ESP_OK;
 
@@ -155,7 +158,8 @@ cleanup:
     return err;
 }
 
-esp_err_t f_mdns_deinit(f_mdns_handle_t handle) {
+esp_err_t f_mdns_deinit(f_mdns_handle_t handle)
+{
     if (!handle) return ESP_OK;
     if (handle->running) mdns_free();
     esp_event_handler_unregister(ESPFM_EVENT, ESP_EVENT_ANY_ID, on_wifi_event);
@@ -165,12 +169,14 @@ esp_err_t f_mdns_deinit(f_mdns_handle_t handle) {
     return ESP_OK;
 }
 
-const char *f_mdns_get_hostname(f_mdns_handle_t handle) {
+const char *f_mdns_get_hostname(f_mdns_handle_t handle)
+{
     if (!handle) return "espfm";
     return handle->hostname;
 }
 
-esp_err_t f_mdns_set_hostname(const char *hostname) {
+esp_err_t f_mdns_set_hostname(const char *hostname)
+{
     if (!validate_hostname(hostname)) {
         ESP_LOGE(TAG, "Invalid hostname: '%s' (RFC 1035: 1-63 lowercase alphanumeric + hyphens)",
                  hostname ? hostname : "(null)");

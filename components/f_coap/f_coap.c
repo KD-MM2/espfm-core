@@ -14,7 +14,7 @@
 
 static const char *TAG = "f_coap";
 #define COAP_TASK_STACK 8192
-#define COAP_TASK_PRIO 4
+#define COAP_TASK_PRIO  4
 
 /*
  * ALL libcoap operations (coap_new_endpoint, coap_free_endpoint,
@@ -30,15 +30,18 @@ static void start_coap(struct f_coap *h)
     if (h->ep) return;
     if (!h->ctx) {
         h->ctx = coap_new_context(NULL);
-        if (!h->ctx) { ESP_LOGE(TAG, "coap_new_context failed"); return; }
+        if (!h->ctx) {
+            ESP_LOGE(TAG, "coap_new_context failed");
+            return;
+        }
         f_coap_register_resources(h->ctx, h);
     }
     coap_address_t listen_addr;
     coap_address_init(&listen_addr);
-    listen_addr.addr.sin.sin_family = AF_INET;
-    listen_addr.addr.sin.sin_port = htons(COAP_PORT);
+    listen_addr.addr.sin.sin_family      = AF_INET;
+    listen_addr.addr.sin.sin_port        = htons(COAP_PORT);
     listen_addr.addr.sin.sin_addr.s_addr = INADDR_ANY;
-    h->ep = coap_new_endpoint(h->ctx, &listen_addr, COAP_PROTO_UDP);
+    h->ep                                = coap_new_endpoint(h->ctx, &listen_addr, COAP_PROTO_UDP);
     if (h->ep) {
         h->running = true;
         ESP_LOGI(TAG, "CoAP endpoint started on port %d", COAP_PORT);
@@ -51,8 +54,14 @@ static void stop_coap(struct f_coap *h)
 {
     if (!h->ep && !h->ctx) return;
     h->running = false;
-    if (h->ep) { coap_free_endpoint(h->ep); h->ep = NULL; }
-    if (h->ctx) { coap_free_context(h->ctx); h->ctx = NULL; }
+    if (h->ep) {
+        coap_free_endpoint(h->ep);
+        h->ep = NULL;
+    }
+    if (h->ctx) {
+        coap_free_context(h->ctx);
+        h->ctx = NULL;
+    }
     ESP_LOGI(TAG, "CoAP stopped (context freed)");
 }
 
@@ -83,52 +92,48 @@ static void coap_task(void *arg)
     }
 }
 
-static void on_wifi_connected(void *arg, esp_event_base_t base,
-                              int32_t id, void *data)
+static void on_wifi_connected(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     struct f_coap *h = (struct f_coap *)arg;
     if (h) h->start_requested = true;
 }
 
-static void on_wifi_disconnected(void *arg, esp_event_base_t base,
-                                 int32_t id, void *data)
+static void on_wifi_disconnected(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     struct f_coap *h = (struct f_coap *)arg;
     if (h) h->stop_requested = true;
 }
 
-static void on_ap_stop(void *arg, esp_event_base_t base,
-                       int32_t id, void *data)
+static void on_ap_stop(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     struct f_coap *h = (struct f_coap *)arg;
     if (!h) return;
     ESP_LOGI(TAG, "AP stopped, will restart CoAP endpoint");
-    h->stop_requested = true;
+    h->stop_requested  = true;
     h->start_requested = true;
 }
 
-esp_err_t f_coap_init(f_coap_handle_t *handle, f_fan_handle_t fan,
-                      f_source_handle_t source, f_curve_handle_t curve,
-                      f_schedule_handle_t schedule, f_config_handle_t config,
-                      f_mdns_handle_t mdns)
+esp_err_t f_coap_init(f_coap_handle_t *handle, f_fan_handle_t fan, f_source_handle_t source,
+                      f_curve_handle_t curve, f_schedule_handle_t schedule,
+                      f_config_handle_t config, f_mdns_handle_t mdns)
 {
     if (!handle) return ESP_ERR_INVALID_ARG;
     struct f_coap *h = calloc(1, sizeof(*h));
     if (!h) return ESP_ERR_NO_MEM;
-    h->fan = fan; h->source = source; h->curve = curve;
-    h->schedule = schedule; h->config = config; h->mdns = mdns;
+    h->fan      = fan;
+    h->source   = source;
+    h->curve    = curve;
+    h->schedule = schedule;
+    h->config   = config;
+    h->mdns     = mdns;
 
     coap_startup();
 
-    esp_event_handler_register(ESPFM_EVENT, ESPFM_EVENT_WIFI_CONNECTED,
-                               on_wifi_connected, h);
-    esp_event_handler_register(ESPFM_EVENT, ESPFM_EVENT_WIFI_DISCONNECTED,
-                               on_wifi_disconnected, h);
-    esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_AP_STOP,
-                               on_ap_stop, h);
+    esp_event_handler_register(ESPFM_EVENT, ESPFM_EVENT_WIFI_CONNECTED, on_wifi_connected, h);
+    esp_event_handler_register(ESPFM_EVENT, ESPFM_EVENT_WIFI_DISCONNECTED, on_wifi_disconnected, h);
+    esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_AP_STOP, on_ap_stop, h);
 
-    BaseType_t ret = xTaskCreate(coap_task, "coap", COAP_TASK_STACK, h,
-                                 COAP_TASK_PRIO, &h->task);
+    BaseType_t ret = xTaskCreate(coap_task, "coap", COAP_TASK_STACK, h, COAP_TASK_PRIO, &h->task);
     if (ret != pdPASS) {
         free(h);
         return ESP_ERR_NO_MEM;
@@ -158,9 +163,11 @@ esp_err_t f_coap_deinit(f_coap_handle_t handle)
     if (!handle) return ESP_OK;
     handle->stop_requested = true;
     /* Wait for task to process stop (up to 500ms) */
-    for (int i = 0; i < 50 && (handle->ep || handle->ctx); i++)
-        vTaskDelay(pdMS_TO_TICKS(10));
-    if (handle->task) { vTaskDelete(handle->task); handle->task = NULL; }
+    for (int i = 0; i < 50 && (handle->ep || handle->ctx); i++) vTaskDelay(pdMS_TO_TICKS(10));
+    if (handle->task) {
+        vTaskDelete(handle->task);
+        handle->task = NULL;
+    }
     coap_cleanup();
     free(handle);
     return ESP_OK;

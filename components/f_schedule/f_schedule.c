@@ -24,7 +24,8 @@ struct f_schedule {
  * typically 4096 bytes on ESP-IDF). This callback must NOT perform deep recursion,
  * large stack allocations, or blocking I/O. Current work is safe: struct timeval,
  * a uint16_t, and a short loop with light f_fan_set_duty calls. */
-static void _sched_timer_cb(TimerHandle_t timer) {
+static void _sched_timer_cb(TimerHandle_t timer)
+{
     f_schedule_handle_t sched = (f_schedule_handle_t)pvTimerGetTimerID(timer);
     struct timeval tv;
     gettimeofday(&tv, NULL);
@@ -36,7 +37,7 @@ static void _sched_timer_cb(TimerHandle_t timer) {
         if (!sched->slot_used[i] || !sched->rules[i].enabled) continue;
         f_schedule_info_t *r = &sched->rules[i];
 
-        bool in_window = false;
+        bool in_window       = false;
         if (r->start_min <= r->end_min) {
             in_window = (now_min >= r->start_min && now_min < r->end_min);
         } else {
@@ -47,8 +48,8 @@ static void _sched_timer_cb(TimerHandle_t timer) {
         if (in_window && !sched->last_active[i]) {
             esp_err_t err = f_fan_set_duty(sched->fan, r->fan_id, r->duty);
             if (err != ESP_OK) {
-                ESP_LOGW(TAG, "Schedule %d: failed to set duty on fan %d: %s",
-                         r->id, r->fan_id, esp_err_to_name(err));
+                ESP_LOGW(TAG, "Schedule %d: failed to set duty on fan %d: %s", r->id, r->fan_id,
+                         esp_err_to_name(err));
             }
             sched->last_active[i] = true;
             ESP_LOGD(TAG, "Schedule %d active: fan %d duty %d%%", r->id, r->fan_id, r->duty);
@@ -59,42 +60,51 @@ static void _sched_timer_cb(TimerHandle_t timer) {
     }
 }
 
-esp_err_t f_schedule_init(f_schedule_handle_t *handle, f_fan_handle_t fan) {
+esp_err_t f_schedule_init(f_schedule_handle_t *handle, f_fan_handle_t fan)
+{
     if (handle == NULL || fan == NULL) return ESP_ERR_INVALID_ARG;
     f_schedule_handle_t h = calloc(1, sizeof(struct f_schedule));
     if (h == NULL) return ESP_ERR_NO_MEM;
     h->fan = fan;
 
-    h->timer = xTimerCreate("sched_timer", pdMS_TO_TICKS(SCHEDULE_PERIOD_MS),
-                             pdTRUE, h, _sched_timer_cb);
-    if (h->timer == NULL) { free(h); return ESP_ERR_NO_MEM; }
+    h->timer =
+        xTimerCreate("sched_timer", pdMS_TO_TICKS(SCHEDULE_PERIOD_MS), pdTRUE, h, _sched_timer_cb);
+    if (h->timer == NULL) {
+        free(h);
+        return ESP_ERR_NO_MEM;
+    }
 
     *handle = h;
     ESP_LOGI(TAG, "Schedule service initialized (period=%ds)", SCHEDULE_PERIOD_MS / 1000);
     return ESP_OK;
 }
 
-esp_err_t f_schedule_add(f_schedule_handle_t handle, const f_schedule_info_t *info, uint8_t *id_out) {
+esp_err_t f_schedule_add(f_schedule_handle_t handle, const f_schedule_info_t *info, uint8_t *id_out)
+{
     if (handle == NULL || info == NULL || id_out == NULL) return ESP_ERR_INVALID_ARG;
     f_fan_info_t tmp;
     if (f_fan_get_info(handle->fan, info->fan_id, &tmp) != ESP_OK) return ESP_ERR_INVALID_ARG;
     int slot = -1;
     for (int i = 0; i < F_SCHEDULE_MAX_COUNT; i++) {
-        if (!handle->slot_used[i]) { slot = i; break; }
+        if (!handle->slot_used[i]) {
+            slot = i;
+            break;
+        }
     }
     if (slot < 0) return ESP_ERR_NO_MEM;
 
     memcpy(&handle->rules[slot], info, sizeof(f_schedule_info_t));
-    handle->rules[slot].id = (uint8_t)slot;
+    handle->rules[slot].id  = (uint8_t)slot;
     handle->slot_used[slot] = true;
     handle->count++;
     *id_out = (uint8_t)slot;
-    ESP_LOGI(TAG, "Schedule %d added: fan %d, %d-%d min, duty %d%%",
-             slot, info->fan_id, info->start_min, info->end_min, info->duty);
+    ESP_LOGI(TAG, "Schedule %d added: fan %d, %d-%d min, duty %d%%", slot, info->fan_id,
+             info->start_min, info->end_min, info->duty);
     return ESP_OK;
 }
 
-esp_err_t f_schedule_remove(f_schedule_handle_t handle, uint8_t id) {
+esp_err_t f_schedule_remove(f_schedule_handle_t handle, uint8_t id)
+{
     if (handle == NULL || id >= F_SCHEDULE_MAX_COUNT) return ESP_ERR_INVALID_ARG;
     if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
     memset(&handle->rules[id], 0, sizeof(f_schedule_info_t));
@@ -107,10 +117,9 @@ esp_err_t f_schedule_remove(f_schedule_handle_t handle, uint8_t id) {
     return ESP_OK;
 }
 
-esp_err_t f_schedule_update(f_schedule_handle_t handle, uint8_t id,
-                             const f_schedule_info_t *info) {
-    if (handle == NULL || info == NULL || id >= F_SCHEDULE_MAX_COUNT)
-        return ESP_ERR_INVALID_ARG;
+esp_err_t f_schedule_update(f_schedule_handle_t handle, uint8_t id, const f_schedule_info_t *info)
+{
+    if (handle == NULL || info == NULL || id >= F_SCHEDULE_MAX_COUNT) return ESP_ERR_INVALID_ARG;
     if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;
     f_fan_info_t tmp;
     if (f_fan_get_info(handle->fan, info->fan_id, &tmp) != ESP_OK) return ESP_ERR_INVALID_ARG;
@@ -123,26 +132,29 @@ esp_err_t f_schedule_update(f_schedule_handle_t handle, uint8_t id,
     return ESP_OK;
 }
 
-esp_err_t f_schedule_start(f_schedule_handle_t handle) {
+esp_err_t f_schedule_start(f_schedule_handle_t handle)
+{
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
     xTimerStart(handle->timer, 0);
     ESP_LOGI(TAG, "Schedule timer started");
     return ESP_OK;
 }
 
-esp_err_t f_schedule_stop(f_schedule_handle_t handle) {
+esp_err_t f_schedule_stop(f_schedule_handle_t handle)
+{
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
     xTimerStop(handle->timer, 0);
     ESP_LOGI(TAG, "Schedule timer stopped");
     return ESP_OK;
 }
 
-uint8_t f_schedule_get_count(f_schedule_handle_t handle) {
+uint8_t f_schedule_get_count(f_schedule_handle_t handle)
+{
     return handle ? handle->count : 0;
 }
 
-esp_err_t f_schedule_get_info(f_schedule_handle_t handle, uint8_t id,
-                               f_schedule_info_t *info_out) {
+esp_err_t f_schedule_get_info(f_schedule_handle_t handle, uint8_t id, f_schedule_info_t *info_out)
+{
     if (handle == NULL || id >= F_SCHEDULE_MAX_COUNT || info_out == NULL)
         return ESP_ERR_INVALID_ARG;
     if (!handle->slot_used[id]) return ESP_ERR_NOT_FOUND;

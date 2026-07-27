@@ -4,19 +4,19 @@
 #include "f_schedule.h"
 #include <string.h>
 
-static const char *ERR_DUTY     = "duty must be 0-100";
-static const char *ERR_MODE     = "mode must be 0 (manual) or 1 (auto)";
-static const char *ERR_GPIO     = "GPIO must be 0-48";
-static const char *ERR_NAME_LEN = "name too long (max 15 chars)";
-static const char *ERR_NAME_EMPTY = "name must not be empty";
-static const char *ERR_TEMP     = "temp_c must be -40.0 to 125.0";
-static const char *ERR_SCHED_RANGE  = "start_min/end_min must be 0-1439";
-static const char *ERR_CURVE_COUNT  = "curve must have 2-16 points";
-static const char *ERR_CURVE_ORDER  = "curve points must be sorted by temp_c ascending";
-static const char *ERR_FAN_FULL     = "max fans reached (8)";
-static const char *ERR_SOURCE_FULL  = "max sources reached (8)";
-static const char *ERR_CURVE_FULL   = "max curves reached (16)";
-static const char *ERR_SCHED_FULL   = "max schedules reached (8)";
+static const char *ERR_DUTY        = "duty must be 0-100";
+static const char *ERR_MODE        = "mode must be 0 (manual) or 1 (auto)";
+static const char *ERR_GPIO        = "GPIO must be 0-48";
+static const char *ERR_NAME_LEN    = "name too long (max 15 chars)";
+static const char *ERR_NAME_EMPTY  = "name must not be empty";
+static const char *ERR_TEMP        = "temp_c must be -40.0 to 125.0";
+static const char *ERR_SCHED_RANGE = "start_min/end_min must be 0-1439";
+static const char *ERR_CURVE_COUNT = "curve must have 2-16 points";
+static const char *ERR_CURVE_ORDER = "curve points must be sorted by temp_c ascending";
+static const char *ERR_FAN_FULL    = "max fans reached (8)";
+static const char *ERR_SOURCE_FULL = "max sources reached (8)";
+static const char *ERR_CURVE_FULL  = "max curves reached (16)";
+static const char *ERR_SCHED_FULL  = "max schedules reached (8)";
 
 esp_err_t f_constraints_duty(int val, const char **err_msg)
 {
@@ -70,7 +70,7 @@ esp_err_t f_constraints_temp_c(float val, const char **err_msg)
 esp_err_t f_constraints_schedule_time(int start_min, int end_min, const char **err_msg)
 {
     if (start_min < F_CONSTRAINT_SCHED_MIN || start_min > F_CONSTRAINT_SCHED_MAX ||
-        end_min   < F_CONSTRAINT_SCHED_MIN || end_min   > F_CONSTRAINT_SCHED_MAX) {
+        end_min < F_CONSTRAINT_SCHED_MIN || end_min > F_CONSTRAINT_SCHED_MAX) {
         if (err_msg) *err_msg = ERR_SCHED_RANGE;
         return ESP_ERR_INVALID_ARG;
     }

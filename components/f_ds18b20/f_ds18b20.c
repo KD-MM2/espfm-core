@@ -14,7 +14,8 @@ struct f_ds18b20 {
     uint8_t device_count;
 };
 
-esp_err_t f_ds18b20_init(f_ds18b20_handle_t *handle, uint8_t gpio) {
+esp_err_t f_ds18b20_init(f_ds18b20_handle_t *handle, uint8_t gpio)
+{
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
     f_ds18b20_handle_t h = calloc(1, sizeof(struct f_ds18b20));
     if (h == NULL) return ESP_ERR_NO_MEM;
@@ -32,7 +33,8 @@ esp_err_t f_ds18b20_init(f_ds18b20_handle_t *handle, uint8_t gpio) {
     return ESP_OK;
 }
 
-esp_err_t f_ds18b20_scan(f_ds18b20_handle_t handle, uint8_t *count_out) {
+esp_err_t f_ds18b20_scan(f_ds18b20_handle_t handle, uint8_t *count_out)
+{
     if (handle == NULL || count_out == NULL) return ESP_ERR_INVALID_ARG;
 
     onewire_device_iter_handle_t iter = NULL;
@@ -56,7 +58,7 @@ esp_err_t f_ds18b20_scan(f_ds18b20_handle_t handle, uint8_t *count_out) {
 
         ds18b20_config_t ds_cfg = {};
         if (ds18b20_new_device_from_enumeration(&next_dev, &ds_cfg,
-                 &handle->devices[handle->device_count]) == ESP_OK) {
+                                                &handle->devices[handle->device_count]) == ESP_OK) {
             handle->device_count++;
             ESP_LOGI(TAG, "DS18B20 found: sensor %d", handle->device_count - 1);
             if (handle->device_count >= F_DS18B20_MAX_DEVICES) {
@@ -72,7 +74,8 @@ esp_err_t f_ds18b20_scan(f_ds18b20_handle_t handle, uint8_t *count_out) {
     return ESP_OK;
 }
 
-esp_err_t f_ds18b20_read_temp(f_ds18b20_handle_t handle, uint8_t index, float *temp_c_out) {
+esp_err_t f_ds18b20_read_temp(f_ds18b20_handle_t handle, uint8_t index, float *temp_c_out)
+{
     if (handle == NULL || temp_c_out == NULL) return ESP_ERR_INVALID_ARG;
     if (index >= handle->device_count) return ESP_ERR_INVALID_ARG;
 

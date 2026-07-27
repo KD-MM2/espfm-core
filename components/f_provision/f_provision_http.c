@@ -9,16 +9,17 @@
 
 static const char *TAG = "f_provision_http";
 
-#define HTTP_RESP_BUF_SIZE  4096
-#define HTTP_BODY_MAX_SIZE  256
-#define WIFI_SSID_MAX_LEN   32
-#define WIFI_PASS_MAX_LEN   64
+#define HTTP_RESP_BUF_SIZE 4096
+#define HTTP_BODY_MAX_SIZE 256
+#define WIFI_SSID_MAX_LEN  32
+#define WIFI_PASS_MAX_LEN  64
 
 /* ------------------------------------------------------------------ */
 /*  GET /  — serve captive portal HTML from LittleFS                   */
 /* ------------------------------------------------------------------ */
 
-static esp_err_t _handle_root(httpd_req_t *req) {
+static esp_err_t _handle_root(httpd_req_t *req)
+{
     FILE *f = fopen("/littlefs/www/index.html", "r");
     if (f == NULL) {
         ESP_LOGW(TAG, "index.html not found");
@@ -46,25 +47,35 @@ static esp_err_t _handle_root(httpd_req_t *req) {
 /*  GET /scan  — blocking scan in APSTA mode, return JSON              */
 /* ------------------------------------------------------------------ */
 
-static const char *_auth_to_str(wifi_auth_mode_t auth) {
+static const char *_auth_to_str(wifi_auth_mode_t auth)
+{
     switch (auth) {
-    case WIFI_AUTH_OPEN:            return "OPEN";
-    case WIFI_AUTH_WEP:             return "WEP";
-    case WIFI_AUTH_WPA_PSK:         return "WPA";
-    case WIFI_AUTH_WPA2_PSK:        return "WPA2";
-    case WIFI_AUTH_WPA_WPA2_PSK:    return "WPA2";
-    case WIFI_AUTH_WPA3_PSK:        return "WPA3";
-    case WIFI_AUTH_WPA2_WPA3_PSK:   return "WPA3";
-    default:                        return "UNKNOWN";
+    case WIFI_AUTH_OPEN:
+        return "OPEN";
+    case WIFI_AUTH_WEP:
+        return "WEP";
+    case WIFI_AUTH_WPA_PSK:
+        return "WPA";
+    case WIFI_AUTH_WPA2_PSK:
+        return "WPA2";
+    case WIFI_AUTH_WPA_WPA2_PSK:
+        return "WPA2";
+    case WIFI_AUTH_WPA3_PSK:
+        return "WPA3";
+    case WIFI_AUTH_WPA2_WPA3_PSK:
+        return "WPA3";
+    default:
+        return "UNKNOWN";
     }
 }
 
-static esp_err_t _handle_scan(httpd_req_t *req) {
+static esp_err_t _handle_scan(httpd_req_t *req)
+{
     ESP_LOGI(TAG, "GET /scan — blocking scan in APSTA mode");
 
     wifi_scan_config_t scan_cfg = {
-        .show_hidden = true,
-        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+        .show_hidden          = true,
+        .scan_type            = WIFI_SCAN_TYPE_ACTIVE,
         .scan_time.active.min = 100,
         .scan_time.active.max = 300,
     };
@@ -94,9 +105,8 @@ static esp_err_t _handle_scan(httpd_req_t *req) {
     esp_wifi_scan_get_ap_records(&ap_count, ap_records);
 
     for (uint16_t i = 0; i < ap_count; i++) {
-        ESP_LOGI(TAG, "  [%d] ssid='%s' ch=%d rssi=%d auth=%s",
-                 i, ap_records[i].ssid, ap_records[i].primary,
-                 ap_records[i].rssi, _auth_to_str(ap_records[i].authmode));
+        ESP_LOGI(TAG, "  [%d] ssid='%s' ch=%d rssi=%d auth=%s", i, ap_records[i].ssid,
+                 ap_records[i].primary, ap_records[i].rssi, _auth_to_str(ap_records[i].authmode));
     }
 
     char *json = calloc(1, HTTP_RESP_BUF_SIZE);
@@ -115,14 +125,12 @@ static esp_err_t _handle_scan(httpd_req_t *req) {
         }
         pos += (size_t)snprintf(json + pos, HTTP_RESP_BUF_SIZE - pos,
                                 "{\"ssid\":\"%s\",\"rssi\":%d,\"auth\":\"%s\",\"ch\":%d}",
-                                (const char *)ap_records[i].ssid,
-                                ap_records[i].rssi,
-                                _auth_to_str(ap_records[i].authmode),
-                                ap_records[i].primary);
+                                (const char *)ap_records[i].ssid, ap_records[i].rssi,
+                                _auth_to_str(ap_records[i].authmode), ap_records[i].primary);
     }
 
     json[pos++] = ']';
-    json[pos] = '\0';
+    json[pos]   = '\0';
 
     free(ap_records);
 
@@ -136,10 +144,10 @@ static esp_err_t _handle_scan(httpd_req_t *req) {
 /*  POST /connect  — save WiFi credentials, restart device             */
 /* ------------------------------------------------------------------ */
 
-static const char *_json_get_str(const char *body, const char *key,
-                                  size_t *len_out) {
+static const char *_json_get_str(const char *body, const char *key, size_t *len_out)
+{
     size_t key_len = strlen(key);
-    const char *p = body;
+    const char *p  = body;
     while ((p = strstr(p, "\"")) != NULL) {
         p++;
         if (strncmp(p, key, key_len) == 0 && p[key_len] == '"') {
@@ -158,7 +166,8 @@ static const char *_json_get_str(const char *body, const char *key,
     return NULL;
 }
 
-static esp_err_t _handle_connect(httpd_req_t *req) {
+static esp_err_t _handle_connect(httpd_req_t *req)
+{
     int total_len = req->content_len;
     if (total_len <= 0 || total_len > HTTP_BODY_MAX_SIZE) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid body");
@@ -181,9 +190,9 @@ static esp_err_t _handle_connect(httpd_req_t *req) {
         }
         received += ret;
     }
-    body[received] = '\0';
+    body[received]       = '\0';
 
-    size_t ssid_len = 0;
+    size_t ssid_len      = 0;
     const char *ssid_val = _json_get_str(body, "ssid", &ssid_len);
     if (ssid_val == NULL || ssid_len == 0) {
         free(body);
@@ -191,7 +200,7 @@ static esp_err_t _handle_connect(httpd_req_t *req) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    size_t pass_len = 0;
+    size_t pass_len      = 0;
     const char *pass_val = _json_get_str(body, "password", &pass_len);
     if (pass_val == NULL) {
         pass_val = "";
@@ -233,7 +242,8 @@ static esp_err_t _handle_connect(httpd_req_t *req) {
 /*  Registration                                                       */
 /* ------------------------------------------------------------------ */
 
-esp_err_t f_provision_register_http_handlers(httpd_handle_t server) {
+esp_err_t f_provision_register_http_handlers(httpd_handle_t server)
+{
     if (server == NULL) return ESP_ERR_INVALID_ARG;
 
     static const httpd_uri_t uri_root = {
