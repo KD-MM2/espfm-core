@@ -34,11 +34,11 @@ except ImportError:
     print("Missing dependency: prompt_toolkit. Install with `pip install prompt_toolkit`.")
     sys.exit(1)
 
-try:
-    import protobuf
-except ImportError:
-    print("Missing dependency: protobuf. Install with `pip install protobuf`.")
-    sys.exit(1)
+# try:
+#     import protobuf
+# except ImportError:
+#     print("Missing dependency: protobuf. Install with `pip install protobuf`.")
+#     sys.exit(1)
 
 from rich.console import Console
 from rich.panel import Panel
