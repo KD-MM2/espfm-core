@@ -75,6 +75,9 @@ PB_BIND(WifiScanResult, WifiScanResult, 2)
 PB_BIND(WifiConnectRequest, WifiConnectRequest, AUTO)
 
 
+PB_BIND(HostnameRequest, HostnameRequest, AUTO)
+
+
 PB_BIND(ConfigFile, ConfigFile, 2)
 
 

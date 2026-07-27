@@ -91,6 +91,7 @@ message SystemInfo {
     uint32 source_count   = 5;
     uint32 curve_count    = 6;
     uint32 schedule_count = 7;
+    string hostname       = 8;  // mDNS hostname (without .local)
 }
 
 message WifiStatus {
@@ -180,6 +181,10 @@ message WifiScanResult { repeated WifiApRecord aps = 1; }
 message WifiConnectRequest {
     string ssid     = 1;
     string password = 2;
+}
+
+message HostnameRequest {
+    string hostname = 1;  // new hostname to set
 }
 
 // ===== Persistence =====
