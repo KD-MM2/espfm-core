@@ -25,44 +25,59 @@ static const char *TAG = "f_coap";
  * WiFi event handler while coap_io_process() was in progress.
  */
 
+static void start_coap(struct f_coap *h)
+{
+    if (h->ep) return;
+    if (!h->ctx) {
+        h->ctx = coap_new_context(NULL);
+        if (!h->ctx) { ESP_LOGE(TAG, "coap_new_context failed"); return; }
+        f_coap_register_resources(h->ctx, h);
+    }
+    coap_address_t listen_addr;
+    coap_address_init(&listen_addr);
+    listen_addr.addr.sin.sin_family = AF_INET;
+    listen_addr.addr.sin.sin_port = htons(COAP_PORT);
+    listen_addr.addr.sin.sin_addr.s_addr = INADDR_ANY;
+    h->ep = coap_new_endpoint(h->ctx, &listen_addr, COAP_PROTO_UDP);
+    if (h->ep) {
+        h->running = true;
+        ESP_LOGI(TAG, "CoAP endpoint started on port %d", COAP_PORT);
+    } else {
+        ESP_LOGE(TAG, "coap_new_endpoint failed");
+    }
+}
+
+static void stop_coap(struct f_coap *h)
+{
+    if (!h->ep && !h->ctx) return;
+    h->running = false;
+    if (h->ep) { coap_free_endpoint(h->ep); h->ep = NULL; }
+    if (h->ctx) { coap_free_context(h->ctx); h->ctx = NULL; }
+    ESP_LOGI(TAG, "CoAP stopped (context freed)");
+}
+
 static void coap_task(void *arg)
 {
     struct f_coap *h = (struct f_coap *)arg;
     while (1) {
-        /* Stop requested — tear down endpoint from THIS task */
-        if (h->stop_requested && h->ep) {
+        if (h->stop_requested) {
             h->stop_requested = false;
-            h->running = false;
-            coap_free_endpoint(h->ep);
-            h->ep = NULL;
-            ESP_LOGI(TAG, "CoAP endpoint stopped");
+            stop_coap(h);
         }
-
-        /* Start requested — create endpoint from THIS task */
-        if (h->start_requested && !h->ep) {
+        if (h->start_requested) {
             h->start_requested = false;
-            coap_address_t listen_addr;
-            coap_address_init(&listen_addr);
-            listen_addr.addr.sin.sin_family = AF_INET;
-            listen_addr.addr.sin.sin_port = htons(COAP_PORT);
-            listen_addr.addr.sin.sin_addr.s_addr = INADDR_ANY;
-            h->ep = coap_new_endpoint(h->ctx, &listen_addr, COAP_PROTO_UDP);
-            if (h->ep) {
-                h->running = true;
-                ESP_LOGI(TAG, "CoAP endpoint started on port %d", COAP_PORT);
-            } else {
-                ESP_LOGE(TAG, "coap_new_endpoint failed");
-            }
+            start_coap(h);
         }
 
-        if (h->running && h->ep) {
+        if (h->running && h->ep && h->ctx) {
             int ret = coap_io_process(h->ctx, 100);
             if (ret < 0) {
                 ESP_LOGW(TAG, "coap_io_process returned %d", ret);
-                h->running = false;
+                stop_coap(h);
+                /* Auto-restart after error (e.g. AP_STOP socket invalidation) */
+                h->start_requested = true;
             }
         } else {
-            /* Idle — don't busy-spin */
             vTaskDelay(pdMS_TO_TICKS(50));
         }
     }
@@ -104,10 +119,6 @@ esp_err_t f_coap_init(f_coap_handle_t *handle, f_fan_handle_t fan,
     h->schedule = schedule; h->config = config; h->mdns = mdns;
 
     coap_startup();
-    h->ctx = coap_new_context(NULL);
-    if (!h->ctx) { free(h); return ESP_FAIL; }
-
-    f_coap_register_resources(h->ctx, h);
 
     esp_event_handler_register(ESPFM_EVENT, ESPFM_EVENT_WIFI_CONNECTED,
                                on_wifi_connected, h);
@@ -119,7 +130,6 @@ esp_err_t f_coap_init(f_coap_handle_t *handle, f_fan_handle_t fan,
     BaseType_t ret = xTaskCreate(coap_task, "coap", COAP_TASK_STACK, h,
                                  COAP_TASK_PRIO, &h->task);
     if (ret != pdPASS) {
-        coap_free_context(h->ctx);
         free(h);
         return ESP_ERR_NO_MEM;
     }
@@ -148,9 +158,9 @@ esp_err_t f_coap_deinit(f_coap_handle_t handle)
     if (!handle) return ESP_OK;
     handle->stop_requested = true;
     /* Wait for task to process stop (up to 500ms) */
-    for (int i = 0; i < 50 && handle->ep; i++) vTaskDelay(pdMS_TO_TICKS(10));
+    for (int i = 0; i < 50 && (handle->ep || handle->ctx); i++)
+        vTaskDelay(pdMS_TO_TICKS(10));
     if (handle->task) { vTaskDelete(handle->task); handle->task = NULL; }
-    if (handle->ctx) { coap_free_context(handle->ctx); handle->ctx = NULL; }
     coap_cleanup();
     free(handle);
     return ESP_OK;
