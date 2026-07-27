@@ -119,6 +119,7 @@ message FanUpdateRequest {
     optional uint32 schedule_id = 6;
     optional uint32 group_id    = 7;
     optional bool inverted      = 8;
+    optional bool enabled       = 9;
 }
 
 message FanId { uint32 id = 1; }

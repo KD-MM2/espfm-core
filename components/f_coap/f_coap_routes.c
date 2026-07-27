@@ -741,13 +741,25 @@ static void handle_system_post(coap_resource_t *resource,
         ESP_ERROR_CHECK(esp_timer_create(&args, &s_reboot_timer));
     }
 
+    esp_err_t err = esp_timer_start_once(s_reboot_timer, 2000000); /* 2 seconds */
+    if (err != ESP_OK) {
+        static StatusResponse sr;
+        sr = (StatusResponse)StatusResponse_init_default;
+        sr.ok = false;
+        snprintf(sr.error_msg, sizeof(sr.error_msg), "timer start failed: %s",
+                 esp_err_to_name(err));
+        encode_response(resp, COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE,
+                        &sr, &StatusResponse_msg);
+        ESP_LOGE(TAG, "esp_timer_start_once failed: %s", esp_err_to_name(err));
+        return;
+    }
+
     s_reboot_pending = true;
-    esp_timer_start_once(s_reboot_timer, 2000000); /* 2 seconds */
 
     static StatusResponse sr;
     sr = (StatusResponse)StatusResponse_init_default;
     sr.ok = true;
-    encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &sr, &StatusResponse_msg);
+    encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &sr, &StatusResponse_msg);
 
     ESP_LOGI(TAG, "Reboot scheduled in 2 seconds");
 }
