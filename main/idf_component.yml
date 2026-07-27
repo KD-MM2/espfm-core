@@ -18,3 +18,4 @@ dependencies:
   espressif/ds18b20: '*'
   espressif/cjson: '*'
   joltwallet/littlefs: '*'
+  espressif/mdns: '*'
