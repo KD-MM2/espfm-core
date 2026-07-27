@@ -274,6 +274,7 @@ class ESPFMClient:
             "mode": "mode", "duty": "duty", "source_id": "source_id",
             "curve_id": "curve_id", "schedule_id": "schedule_id",
             "group_id": "group_id", "inverted": "inverted",
+            "enabled": "enabled",
         }
         for key, field in field_map.items():
             if key in kwargs:
@@ -592,11 +593,29 @@ def _handle_fans(shell: ESPFMShell, args: list[str]) -> None:
                 kwargs["group_id"] = int(flags["group"])
             if "inverted" in flags:
                 kwargs["inverted"] = _parse_bool(flags["inverted"])
+            if "enabled" in flags:
+                kwargs["enabled"] = _parse_bool(flags["enabled"])
             if not kwargs:
                 console.print("[yellow]No fields to update.[/yellow]")
                 return
             f = client.fans_update(fan_id, **kwargs)
             console.print(f"[green]Updated fan {f.id}:[/green] {f.name}")
+
+        elif action == "enable":
+            if len(args) < 2:
+                console.print("[yellow]Usage: fans enable <id>[/yellow]")
+                return
+            fan_id = int(args[1])
+            f = client.fans_update(fan_id, enabled=True)
+            console.print(f"[green]Enabled fan {f.id}.[/green]")
+
+        elif action == "disable":
+            if len(args) < 2:
+                console.print("[yellow]Usage: fans disable <id>[/yellow]")
+                return
+            fan_id = int(args[1])
+            f = client.fans_update(fan_id, enabled=False)
+            console.print(f"[green]Disabled fan {f.id}.[/green]")
 
         elif action == "delete":
             if len(args) < 2:
@@ -1541,6 +1560,8 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
                 "  fans get <id>                        — Show fan detail\n"
                 "  fans create --pwm <gpio> --name <n>  — Create fan\n"
                 "  fans update <id> [--duty N] [--mode auto|manual] ...  — Update fan\n"
+                "  fans enable <id>                     — Enable a fan\n"
+                "  fans disable <id>                    — Disable a fan\n"
                 "  fans delete <id>                     — Delete fan"
             ),
             "sources": (
@@ -1596,7 +1617,7 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
   exit / quit                                Exit shell
 
 [bold cyan]Resources[/bold cyan]
-  fans       list | get | create | update | delete
+  fans       list | get | create | update | delete | enable | disable
   sources    list | get | create | temp | delete
   curves     list | get | create | update | delete
   schedules  list | create | update | delete
@@ -1670,7 +1691,7 @@ class ESPFMShell:
                 "connect", "disconnect", "help", "exit", "quit",
                 "fans", "sources", "curves", "schedules", "wifi", "system", "devices",
                 "dashboard", "export", "import",
-                "list", "get", "create", "update", "delete", "temp",
+                "list", "get", "create", "update", "delete", "enable", "disable", "temp",
                 "scan", "status", "info",
                 "--pwm", "--tach", "--name", "--type", "--gpio", "--temp",
                 "--duty", "--mode", "--source", "--curve", "--schedule",
