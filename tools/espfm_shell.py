@@ -52,6 +52,12 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.history import InMemoryHistory
 
+try:
+    from zeroconf import Zeroconf, ServiceBrowser, ServiceListener
+    HAS_ZEROCONF = True
+except ImportError:
+    HAS_ZEROCONF = False
+
 console = Console()
 
 # ============================================================
@@ -397,6 +403,11 @@ class ESPFMClient:
     def system_info(self) -> pb.SystemInfo:
         _, data = self._get("/system/info")
         return self._decode(pb.SystemInfo, data)
+
+    def system_set_hostname(self, hostname: str) -> pb.StatusResponse:
+        req = pb.HostnameRequest(hostname=hostname)
+        _, data = self._put("/system/hostname", req)
+        return self._decode(pb.StatusResponse, data)
 
 
 # ============================================================
@@ -937,6 +948,192 @@ def _handle_system(shell: ESPFMShell, args: list[str]) -> None:
         console.print(f"[red]{_error_message(e)}[/red]")
 
 
+def _handle_devices(shell: ESPFMShell, args: list[str]) -> None:
+    if not args:
+        console.print("[yellow]Usage: devices <scan|connect|update> ...[/yellow]")
+        return
+    action = args[0]
+
+    if action == "scan":
+        if not HAS_ZEROCONF:
+            console.print("[red]zeroconf not installed. Run: pip install zeroconf[/red]")
+            return
+        flags = _parse_flags(args[1:])
+        timeout = float(flags.get("timeout", 3.0))
+        _devices_scan(timeout)
+
+    elif action == "connect":
+        if len(args) < 2:
+            console.print("[yellow]Usage: devices connect <XXYY>[/yellow]")
+            return
+        suffix = args[1].lower()
+        _devices_connect(shell, suffix)
+
+    elif action == "update":
+        if len(args) < 2:
+            console.print("[yellow]Usage: devices update <XXYY> --hostname <name>[/yellow]")
+            return
+        suffix = args[1].lower()
+        flags = _parse_flags(args[2:])
+        hostname = flags.get("hostname", "")
+        if not hostname:
+            console.print("[yellow]Missing --hostname <name>[/yellow]")
+            return
+        _devices_update(shell, suffix, hostname)
+
+    else:
+        console.print(f"[yellow]Unknown devices action: {action}[/yellow]")
+
+
+def _devices_scan(timeout: float) -> None:
+    """Scan LAN for ESPFM devices via mDNS."""
+    results: list[dict[str, Any]] = []
+
+    class _Listener(ServiceListener):
+        def add_service(self, zc: Zeroconf, svc_type: str, name: str) -> None:
+            info = zc.get_service_info(svc_type, name)
+            if info is None:
+                return
+            hostname = name.split(".")[0]  # e.g. "espfm-b629"
+            ip = ".".join(str(b) for b in info.addresses[0]) if info.addresses else "?"
+            txt: dict[str, str] = {}
+            if info.properties:
+                for k, v in info.properties.items():
+                    key = k.decode() if isinstance(k, bytes) else str(k)
+                    val = v.decode() if isinstance(v, bytes) else str(v)
+                    txt[key] = val
+            results.append({"hostname": hostname, "ip": ip, "port": info.port, "txt": txt})
+
+        def remove_service(self, zc: Zeroconf, svc_type: str, name: str) -> None:
+            pass
+
+        def update_service(self, zc: Zeroconf, svc_type: str, name: str) -> None:
+            pass
+
+    console.print(f"[dim]Scanning for ESPFM devices ({timeout}s)...[/dim]")
+    zc = Zeroconf()
+    listener = _Listener()
+    browser = ServiceBrowser(zc, "_espfm._tcp.local.", listener)
+    time.sleep(timeout)
+    browser.cancel()
+    zc.close()
+
+    if not results:
+        console.print("[dim]No ESPFM devices found.[/dim]")
+        return
+
+    table = Table(title="ESPFM Devices")
+    table.add_column("Hostname")
+    table.add_column("IP Address")
+    table.add_column("Port", justify="right")
+    table.add_column("Version")
+    table.add_column("Firmware")
+    for r in results:
+        table.add_row(
+            r["hostname"],
+            r["ip"],
+            str(r["port"]),
+            r["txt"].get("version", "?"),
+            r["txt"].get("fw", "?"),
+        )
+    console.print(table)
+
+
+def _devices_connect(shell: ESPFMShell, suffix: str) -> None:
+    """Scan for device by MAC suffix and auto-connect."""
+    if not HAS_ZEROCONF:
+        console.print("[red]zeroconf not installed. Run: pip install zeroconf[/red]")
+        return
+
+    console.print(f"[dim]Scanning for device ending in '{suffix}'...[/dim]")
+    results: list[tuple[str, int]] = []
+
+    class _Listener(ServiceListener):
+        def add_service(self, zc: Zeroconf, svc_type: str, name: str) -> None:
+            info = zc.get_service_info(svc_type, name)
+            if info is None or not info.addresses:
+                return
+            hostname = name.split(".")[0]
+            if hostname.endswith(suffix):
+                ip = ".".join(str(b) for b in info.addresses[0])
+                results.append((ip, info.port))
+
+        def remove_service(self, zc: Zeroconf, svc_type: str, name: str) -> None:
+            pass
+
+        def update_service(self, zc: Zeroconf, svc_type: str, name: str) -> None:
+            pass
+
+    zc = Zeroconf()
+    listener = _Listener()
+    browser = ServiceBrowser(zc, "_espfm._tcp.local.", listener)
+    time.sleep(3)
+    browser.cancel()
+    zc.close()
+
+    if not results:
+        console.print(f"[red]No device found with suffix '{suffix}'.[/red]")
+        return
+
+    ip, port = results[0]
+    shell._disconnect()
+    shell._connect(ip, port)
+
+
+def _devices_update(shell: ESPFMShell, suffix: str, hostname: str) -> None:
+    """Scan for device, connect, and update hostname."""
+    if not HAS_ZEROCONF:
+        console.print("[red]zeroconf not installed. Run: pip install zeroconf[/red]")
+        return
+
+    console.print(f"[dim]Scanning for device ending in '{suffix}'...[/dim]")
+    results: list[tuple[str, int]] = []
+
+    class _Listener(ServiceListener):
+        def add_service(self, zc: Zeroconf, svc_type: str, name: str) -> None:
+            info = zc.get_service_info(svc_type, name)
+            if info is None or not info.addresses:
+                return
+            hn = name.split(".")[0]
+            if hn.endswith(suffix):
+                ip = ".".join(str(b) for b in info.addresses[0])
+                results.append((ip, info.port))
+
+        def remove_service(self, zc: Zeroconf, svc_type: str, name: str) -> None:
+            pass
+
+        def update_service(self, zc: Zeroconf, svc_type: str, name: str) -> None:
+            pass
+
+    zc = Zeroconf()
+    listener = _Listener()
+    browser = ServiceBrowser(zc, "_espfm._tcp.local.", listener)
+    time.sleep(3)
+    browser.cancel()
+    zc.close()
+
+    if not results:
+        console.print(f"[red]No device found with suffix '{suffix}'.[/red]")
+        return
+
+    ip, port = results[0]
+    shell._disconnect()
+    shell._connect(ip, port)
+
+    if not shell.client:
+        console.print("[red]Failed to connect.[/red]")
+        return
+
+    try:
+        result = shell.client.system_set_hostname(hostname)
+        if result.ok:
+            console.print(f"[green]Hostname set to '{hostname}'. Reboot to take effect.[/green]")
+        else:
+            console.print(f"[red]Failed: {result.error_msg}[/red]")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
 def _handle_dashboard(shell: ESPFMShell) -> None:
     if not _check_connected(shell):
         return
@@ -1347,6 +1544,11 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
                 "  wifi connect --ssid <n> --pass <p>   — Connect to AP"
             ),
             "system": "system info  — Show version, uptime, heap, entity counts",
+            "devices": (
+                "devices scan [--timeout N]            — Scan LAN for ESPFM devices (mDNS)\n"
+                "  devices connect XXYY                — Connect to device by MAC suffix\n"
+                "  devices update XXYY --hostname NAME — Change device hostname"
+            ),
             "dashboard": "dashboard  — Poll all resources, show multi-table summary",
             "export": "export <file.json>  — Dump full device state to JSON",
             "import": "import <file.json> [--no-delete]  — Apply config from JSON",
@@ -1372,6 +1574,7 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
   schedules  list | create | update | delete
   wifi       scan | status | connect
   system     info
+  devices    scan | connect | update
 
 [bold cyan]Data Operations[/bold cyan]
   dashboard                 Multi-table summary
@@ -1437,7 +1640,7 @@ class ESPFMShell:
         completer = WordCompleter(
             [
                 "connect", "disconnect", "help", "exit", "quit",
-                "fans", "sources", "curves", "schedules", "wifi", "system",
+                "fans", "sources", "curves", "schedules", "wifi", "system", "devices",
                 "dashboard", "export", "import",
                 "list", "get", "create", "update", "delete", "temp",
                 "scan", "status", "info",
@@ -1446,6 +1649,7 @@ class ESPFMShell:
                 "--group", "--inverted", "--enabled",
                 "--points", "--fan", "--start", "--end",
                 "--ssid", "--pass", "--port", "--timeout", "--no-delete",
+                "--hostname",
                 "auto", "manual", "ntc", "ds18b20", "true", "false",
             ],
             ignore_case=True,
@@ -1503,6 +1707,8 @@ class ESPFMShell:
                     _handle_wifi(self, args)
                 elif cmd == "system":
                     _handle_system(self, args)
+                elif cmd == "devices":
+                    _handle_devices(self, args)
                 elif cmd == "dashboard":
                     _handle_dashboard(self)
                 elif cmd == "export":
