@@ -57,7 +57,7 @@ static void save_config(struct f_coap *h)
         f_config_save_all(h->config, h->fan, h->source, h->curve, h->schedule);
 }
 
-static bool encode_response(coap_pdu_t *resp, coap_responsecode_t code,
+static bool encode_response(coap_pdu_t *resp, coap_pdu_code_t code,
                             const void *msg, const pb_msgdesc_t *desc)
 {
     coap_pdu_set_code(resp, code);
@@ -85,9 +85,9 @@ static bool decode_request(const coap_pdu_t *req, void *msg,
 
 static void handle_fan_get(coap_resource_t *resource, coap_session_t *session,
                            const coap_pdu_t *req, const coap_string_t *query,
-                           coap_pdu_t *resp, void *user_data)
+                           coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
 
@@ -96,12 +96,12 @@ static void handle_fan_get(coap_resource_t *resource, coap_session_t *session,
         uint32_t id = (uint32_t)atoi(seg[1]);
         f_fan_info_t fi;
         if (f_fan_get_info(h->fan, (uint8_t)id, &fi) != ESP_OK) {
-            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
             return;
         }
         static FanInfo pb;
         f_coap_fan_to_pb(&fi, &pb);
-        encode_response(resp, COAP_RESPONSE_CODE_205_CONTENT, &pb, &FanInfo_msg);
+        encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &pb, &FanInfo_msg);
     } else {
         /* GET /fans — list all */
         static FanList list;
@@ -111,24 +111,24 @@ static void handle_fan_get(coap_resource_t *resource, coap_session_t *session,
             if (f_fan_get_info(h->fan, i, &fi) == ESP_OK)
                 f_coap_fan_to_pb(&fi, &list.fans[list.fans_count++]);
         }
-        encode_response(resp, COAP_RESPONSE_CODE_205_CONTENT, &list, &FanList_msg);
+        encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &list, &FanList_msg);
     }
 }
 
 static void handle_fan_post(coap_resource_t *resource, coap_session_t *session,
                             const coap_pdu_t *req, const coap_string_t *query,
-                            coap_pdu_t *resp, void *user_data)
+                            coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     FanCreateRequest cr = FanCreateRequest_init_default;
     if (!decode_request(req, &cr, &FanCreateRequest_msg)) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
     }
     uint8_t nid;
     if (f_fan_add(h->fan, (uint8_t)cr.pwm_gpio, (uint8_t)cr.tach_gpio,
                   cr.name, &nid) != ESP_OK) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
     }
     save_config(h);
@@ -136,30 +136,30 @@ static void handle_fan_post(coap_resource_t *resource, coap_session_t *session,
     f_fan_get_info(h->fan, nid, &fi);
     static FanInfo pb;
     f_coap_fan_to_pb(&fi, &pb);
-    encode_response(resp, COAP_RESPONSE_CODE_201_CREATED, &pb, &FanInfo_msg);
+    encode_response(resp, COAP_RESPONSE_CODE_CREATED, &pb, &FanInfo_msg);
 }
 
 static void handle_fan_put(coap_resource_t *resource, coap_session_t *session,
                            const coap_pdu_t *req, const coap_string_t *query,
-                           coap_pdu_t *resp, void *user_data)
+                           coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
     if (nseg < 2) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
     uint32_t id = (uint32_t)atoi(seg[1]);
 
     FanUpdateRequest ur = FanUpdateRequest_init_default;
     if (!decode_request(req, &ur, &FanUpdateRequest_msg)) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
     }
     f_fan_info_t fi;
     if (f_fan_get_info(h->fan, (uint8_t)id, &fi) != ESP_OK) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
     if (ur.has_mode)        f_fan_set_mode(h->fan, (uint8_t)id, (fan_mode_t)ur.mode);
@@ -173,31 +173,31 @@ static void handle_fan_put(coap_resource_t *resource, coap_session_t *session,
     f_fan_get_info(h->fan, (uint8_t)id, &fi);
     static FanInfo pb;
     f_coap_fan_to_pb(&fi, &pb);
-    encode_response(resp, COAP_RESPONSE_CODE_204_CHANGED, &pb, &FanInfo_msg);
+    encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &pb, &FanInfo_msg);
 }
 
 static void handle_fan_delete(coap_resource_t *resource,
                               coap_session_t *session,
                               const coap_pdu_t *req, const coap_string_t *query,
-                              coap_pdu_t *resp, void *user_data)
+                              coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
     if (nseg < 2) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
     uint32_t id = (uint32_t)atoi(seg[1]);
     if (f_fan_remove(h->fan, (uint8_t)id) != ESP_OK) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
     save_config(h);
     static StatusResponse sr;
     sr = (StatusResponse)StatusResponse_init_default;
     sr.ok = true;
-    encode_response(resp, COAP_RESPONSE_CODE_202_DELETED, &sr, &StatusResponse_msg);
+    encode_response(resp, COAP_RESPONSE_CODE_DELETED, &sr, &StatusResponse_msg);
 }
 
 /* ------------------------------------------------------------------ */
@@ -207,9 +207,9 @@ static void handle_fan_delete(coap_resource_t *resource,
 static void handle_source_get(coap_resource_t *resource,
                               coap_session_t *session,
                               const coap_pdu_t *req, const coap_string_t *query,
-                              coap_pdu_t *resp, void *user_data)
+                              coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
 
@@ -218,12 +218,12 @@ static void handle_source_get(coap_resource_t *resource,
         uint32_t id = (uint32_t)atoi(seg[1]);
         f_source_info_t si;
         if (f_source_get_info(h->source, (uint8_t)id, &si) != ESP_OK) {
-            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
             return;
         }
         static SourceInfo pb;
         f_coap_source_to_pb(&si, &pb);
-        encode_response(resp, COAP_RESPONSE_CODE_205_CONTENT, &pb, &SourceInfo_msg);
+        encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &pb, &SourceInfo_msg);
     } else {
         /* GET /sources — list all */
         static SourceList list;
@@ -233,7 +233,7 @@ static void handle_source_get(coap_resource_t *resource,
             if (f_source_get_info(h->source, i, &si) == ESP_OK)
                 f_coap_source_to_pb(&si, &list.sources[list.sources_count++]);
         }
-        encode_response(resp, COAP_RESPONSE_CODE_205_CONTENT, &list,
+        encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &list,
                         &SourceList_msg);
     }
 }
@@ -241,9 +241,9 @@ static void handle_source_get(coap_resource_t *resource,
 static void handle_source_post(coap_resource_t *resource,
                                coap_session_t *session,
                                const coap_pdu_t *req, const coap_string_t *query,
-                               coap_pdu_t *resp, void *user_data)
+                               coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
 
@@ -251,35 +251,35 @@ static void handle_source_post(coap_resource_t *resource,
         /* POST /sources/temp — manual temperature update */
         ManualTempRequest mtr = ManualTempRequest_init_default;
         if (!decode_request(req, &mtr, &ManualTempRequest_msg)) {
-            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
             return;
         }
         f_source_info_t si_check;
         if (f_source_get_info(h->source, (uint8_t)mtr.id, &si_check) != ESP_OK) {
-            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
             return;
         }
         if (f_source_update_manual(h->source, (uint8_t)mtr.id, mtr.temp_c)
             != ESP_OK) {
-            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
             return;
         }
         static StatusResponse sr;
         sr = (StatusResponse)StatusResponse_init_default;
         sr.ok = true;
-        encode_response(resp, COAP_RESPONSE_CODE_204_CHANGED, &sr,
+        encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &sr,
                         &StatusResponse_msg);
     } else {
         /* POST /sources — create */
         SourceCreateRequest cr = SourceCreateRequest_init_default;
         if (!decode_request(req, &cr, &SourceCreateRequest_msg)) {
-            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
             return;
         }
         uint8_t nid;
         if (f_source_add(h->source, pb_to_source_type(cr.type),
                          (uint8_t)cr.gpio, cr.name, &nid) != ESP_OK) {
-            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
             return;
         }
         save_config(h);
@@ -287,7 +287,7 @@ static void handle_source_post(coap_resource_t *resource,
         f_source_get_info(h->source, nid, &si);
         static SourceInfo pb;
         f_coap_source_to_pb(&si, &pb);
-        encode_response(resp, COAP_RESPONSE_CODE_201_CREATED, &pb,
+        encode_response(resp, COAP_RESPONSE_CODE_CREATED, &pb,
                         &SourceInfo_msg);
     }
 }
@@ -296,25 +296,25 @@ static void handle_source_delete(coap_resource_t *resource,
                                  coap_session_t *session,
                                  const coap_pdu_t *req,
                                  const coap_string_t *query,
-                                 coap_pdu_t *resp, void *user_data)
+                                 coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
     if (nseg < 2) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
     uint32_t id = (uint32_t)atoi(seg[1]);
     if (f_source_remove(h->source, (uint8_t)id) != ESP_OK) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
     save_config(h);
     static StatusResponse sr;
     sr = (StatusResponse)StatusResponse_init_default;
     sr.ok = true;
-    encode_response(resp, COAP_RESPONSE_CODE_202_DELETED, &sr,
+    encode_response(resp, COAP_RESPONSE_CODE_DELETED, &sr,
                     &StatusResponse_msg);
 }
 
@@ -325,9 +325,9 @@ static void handle_source_delete(coap_resource_t *resource,
 static void handle_curve_get(coap_resource_t *resource,
                              coap_session_t *session,
                              const coap_pdu_t *req, const coap_string_t *query,
-                             coap_pdu_t *resp, void *user_data)
+                             coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
 
@@ -336,12 +336,12 @@ static void handle_curve_get(coap_resource_t *resource,
         uint32_t id = (uint32_t)atoi(seg[1]);
         f_curve_info_t ci;
         if (f_curve_get_info(h->curve, (uint8_t)id, &ci) != ESP_OK) {
-            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
             return;
         }
         static CurveInfo pb;
         f_coap_curve_to_pb(&ci, &pb);
-        encode_response(resp, COAP_RESPONSE_CODE_205_CONTENT, &pb, &CurveInfo_msg);
+        encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &pb, &CurveInfo_msg);
     } else {
         /* GET /curves — list all */
         static CurveList list;
@@ -351,7 +351,7 @@ static void handle_curve_get(coap_resource_t *resource,
             if (f_curve_get_info(h->curve, i, &ci) == ESP_OK)
                 f_coap_curve_to_pb(&ci, &list.curves[list.curves_count++]);
         }
-        encode_response(resp, COAP_RESPONSE_CODE_205_CONTENT, &list,
+        encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &list,
                         &CurveList_msg);
     }
 }
@@ -359,12 +359,12 @@ static void handle_curve_get(coap_resource_t *resource,
 static void handle_curve_post(coap_resource_t *resource,
                               coap_session_t *session,
                               const coap_pdu_t *req, const coap_string_t *query,
-                              coap_pdu_t *resp, void *user_data)
+                              coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     CurveCreateRequest cr = CurveCreateRequest_init_default;
     if (!decode_request(req, &cr, &CurveCreateRequest_msg)) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
     }
     f_curve_info_t ci = { 0 };
@@ -377,33 +377,33 @@ static void handle_curve_post(coap_resource_t *resource,
     }
     uint8_t nid;
     if (f_curve_upsert(h->curve, &ci, &nid) != ESP_OK) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
     }
     save_config(h);
     f_curve_get_info(h->curve, nid, &ci);
     static CurveInfo pb;
     f_coap_curve_to_pb(&ci, &pb);
-    encode_response(resp, COAP_RESPONSE_CODE_201_CREATED, &pb, &CurveInfo_msg);
+    encode_response(resp, COAP_RESPONSE_CODE_CREATED, &pb, &CurveInfo_msg);
 }
 
 static void handle_curve_put(coap_resource_t *resource,
                              coap_session_t *session,
                              const coap_pdu_t *req, const coap_string_t *query,
-                             coap_pdu_t *resp, void *user_data)
+                             coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
     if (nseg < 2) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
     uint32_t id = (uint32_t)atoi(seg[1]);
 
     CurveUpdateRequest ur = CurveUpdateRequest_init_default;
     if (!decode_request(req, &ur, &CurveUpdateRequest_msg)) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
     }
     f_curve_info_t ci = { 0 };
@@ -417,39 +417,39 @@ static void handle_curve_put(coap_resource_t *resource,
     }
     uint8_t oid;
     if (f_curve_upsert(h->curve, &ci, &oid) != ESP_OK) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
     }
     save_config(h);
     f_curve_get_info(h->curve, oid, &ci);
     static CurveInfo pb;
     f_coap_curve_to_pb(&ci, &pb);
-    encode_response(resp, COAP_RESPONSE_CODE_204_CHANGED, &pb, &CurveInfo_msg);
+    encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &pb, &CurveInfo_msg);
 }
 
 static void handle_curve_delete(coap_resource_t *resource,
                                 coap_session_t *session,
                                 const coap_pdu_t *req,
                                 const coap_string_t *query,
-                                coap_pdu_t *resp, void *user_data)
+                                coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
     if (nseg < 2) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
     uint32_t id = (uint32_t)atoi(seg[1]);
     if (f_curve_remove(h->curve, (uint8_t)id) != ESP_OK) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
     save_config(h);
     static StatusResponse sr;
     sr = (StatusResponse)StatusResponse_init_default;
     sr.ok = true;
-    encode_response(resp, COAP_RESPONSE_CODE_202_DELETED, &sr,
+    encode_response(resp, COAP_RESPONSE_CODE_DELETED, &sr,
                     &StatusResponse_msg);
 }
 
@@ -461,9 +461,9 @@ static void handle_schedule_get(coap_resource_t *resource,
                                 coap_session_t *session,
                                 const coap_pdu_t *req,
                                 const coap_string_t *query,
-                                coap_pdu_t *resp, void *user_data)
+                                coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     static ScheduleList list;
     list = (ScheduleList)ScheduleList_init_default;
     for (uint8_t i = 0; i < F_SCHEDULE_MAX_COUNT; i++) {
@@ -471,7 +471,7 @@ static void handle_schedule_get(coap_resource_t *resource,
         if (f_schedule_get_info(h->schedule, i, &si) == ESP_OK)
             f_coap_schedule_to_pb(&si, &list.schedules[list.schedules_count++]);
     }
-    encode_response(resp, COAP_RESPONSE_CODE_205_CONTENT, &list,
+    encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &list,
                     &ScheduleList_msg);
 }
 
@@ -479,12 +479,12 @@ static void handle_schedule_post(coap_resource_t *resource,
                                  coap_session_t *session,
                                  const coap_pdu_t *req,
                                  const coap_string_t *query,
-                                 coap_pdu_t *resp, void *user_data)
+                                 coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     ScheduleCreateRequest cr = ScheduleCreateRequest_init_default;
     if (!decode_request(req, &cr, &ScheduleCreateRequest_msg)) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
     }
     f_schedule_info_t si = {
@@ -496,14 +496,14 @@ static void handle_schedule_post(coap_resource_t *resource,
     };
     uint8_t nid;
     if (f_schedule_add(h->schedule, &si, &nid) != ESP_OK) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
     }
     save_config(h);
     f_schedule_get_info(h->schedule, nid, &si);
     static ScheduleInfo pb;
     f_coap_schedule_to_pb(&si, &pb);
-    encode_response(resp, COAP_RESPONSE_CODE_201_CREATED, &pb,
+    encode_response(resp, COAP_RESPONSE_CODE_CREATED, &pb,
                     &ScheduleInfo_msg);
 }
 
@@ -511,25 +511,25 @@ static void handle_schedule_put(coap_resource_t *resource,
                                 coap_session_t *session,
                                 const coap_pdu_t *req,
                                 const coap_string_t *query,
-                                coap_pdu_t *resp, void *user_data)
+                                coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
     if (nseg < 2) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
     uint32_t id = (uint32_t)atoi(seg[1]);
 
     ScheduleUpdateRequest ur = ScheduleUpdateRequest_init_default;
     if (!decode_request(req, &ur, &ScheduleUpdateRequest_msg)) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
     }
     f_schedule_info_t si;
     if (f_schedule_get_info(h->schedule, (uint8_t)id, &si) != ESP_OK) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
     if (ur.has_fan_id)    si.fan_id    = (uint8_t)ur.fan_id;
@@ -538,14 +538,14 @@ static void handle_schedule_put(coap_resource_t *resource,
     if (ur.has_end_min)   si.end_min   = (uint16_t)ur.end_min;
     if (ur.has_enabled)   si.enabled   = ur.enabled;
     if (f_schedule_update(h->schedule, (uint8_t)id, &si) != ESP_OK) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
     save_config(h);
     f_schedule_get_info(h->schedule, (uint8_t)id, &si);
     static ScheduleInfo pb;
     f_coap_schedule_to_pb(&si, &pb);
-    encode_response(resp, COAP_RESPONSE_CODE_204_CHANGED, &pb,
+    encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &pb,
                     &ScheduleInfo_msg);
 }
 
@@ -553,25 +553,25 @@ static void handle_schedule_delete(coap_resource_t *resource,
                                    coap_session_t *session,
                                    const coap_pdu_t *req,
                                    const coap_string_t *query,
-                                   coap_pdu_t *resp, void *user_data)
+                                   coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
     if (nseg < 2) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
     uint32_t id = (uint32_t)atoi(seg[1]);
     if (f_schedule_remove(h->schedule, (uint8_t)id) != ESP_OK) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
     save_config(h);
     static StatusResponse sr;
     sr = (StatusResponse)StatusResponse_init_default;
     sr.ok = true;
-    encode_response(resp, COAP_RESPONSE_CODE_202_DELETED, &sr,
+    encode_response(resp, COAP_RESPONSE_CODE_DELETED, &sr,
                     &StatusResponse_msg);
 }
 
@@ -582,12 +582,12 @@ static void handle_schedule_delete(coap_resource_t *resource,
 static void handle_wifi_get(coap_resource_t *resource,
                             coap_session_t *session,
                             const coap_pdu_t *req, const coap_string_t *query,
-                            coap_pdu_t *resp, void *user_data)
+                            coap_pdu_t *resp)
 {
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
     if (nseg < 2) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
 
@@ -600,7 +600,7 @@ static void handle_wifi_get(coap_resource_t *resource,
         };
         if (esp_wifi_scan_start(&sc, true) != ESP_OK) {
             coap_pdu_set_code(resp,
-                              COAP_RESPONSE_CODE_503_SERVICE_UNAVAILABLE);
+                              COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE);
             return;
         }
         uint16_t n = 0;
@@ -624,7 +624,7 @@ static void handle_wifi_get(coap_resource_t *resource,
                 free(aps);
             }
         }
-        encode_response(resp, COAP_RESPONSE_CODE_205_CONTENT, &sr,
+        encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &sr,
                         &WifiScanResult_msg);
     } else if (strcmp(seg[1], "status") == 0) {
         /* GET /wifi/status */
@@ -640,29 +640,29 @@ static void handle_wifi_get(coap_resource_t *resource,
         }
         strncpy(ws.ap_ip, "192.168.4.1", sizeof(ws.ap_ip) - 1);
         ws.ap_ip[sizeof(ws.ap_ip) - 1] = '\0';
-        encode_response(resp, COAP_RESPONSE_CODE_205_CONTENT, &ws,
+        encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &ws,
                         &WifiStatus_msg);
     } else {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
     }
 }
 
 static void handle_wifi_post(coap_resource_t *resource,
                              coap_session_t *session,
                              const coap_pdu_t *req, const coap_string_t *query,
-                             coap_pdu_t *resp, void *user_data)
+                             coap_pdu_t *resp)
 {
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
     if (nseg < 2 || strcmp(seg[1], "connect") != 0) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
 
     /* POST /wifi/connect */
     WifiConnectRequest cr = WifiConnectRequest_init_default;
     if (!decode_request(req, &cr, &WifiConnectRequest_msg)) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
     }
     wifi_config_t wc = { 0 };
@@ -670,7 +670,7 @@ static void handle_wifi_post(coap_resource_t *resource,
     strncpy((char *)wc.sta.password, cr.password, sizeof(wc.sta.password) - 1);
     wc.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     if (esp_wifi_set_config(WIFI_IF_STA, &wc) != ESP_OK) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_503_SERVICE_UNAVAILABLE);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE);
         return;
     }
     esp_wifi_disconnect();
@@ -678,7 +678,7 @@ static void handle_wifi_post(coap_resource_t *resource,
     static StatusResponse sr;
     sr = (StatusResponse)StatusResponse_init_default;
     sr.ok = true;
-    encode_response(resp, COAP_RESPONSE_CODE_204_CHANGED, &sr,
+    encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &sr,
                     &StatusResponse_msg);
 }
 
@@ -689,13 +689,13 @@ static void handle_wifi_post(coap_resource_t *resource,
 static void handle_system_get(coap_resource_t *resource,
                               coap_session_t *session,
                               const coap_pdu_t *req, const coap_string_t *query,
-                              coap_pdu_t *resp, void *user_data)
+                              coap_pdu_t *resp)
 {
-    struct f_coap *h = (struct f_coap *)user_data;
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
     if (nseg < 2 || strcmp(seg[1], "info") != 0) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
 
@@ -714,34 +714,34 @@ static void handle_system_get(coap_resource_t *resource,
         strncpy(si.hostname, hostname, sizeof(si.hostname) - 1);
         si.hostname[sizeof(si.hostname) - 1] = '\0';
     }
-    encode_response(resp, COAP_RESPONSE_CODE_205_CONTENT, &si, &SystemInfo_msg);
+    encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &si, &SystemInfo_msg);
 }
 
 static void handle_system_put(coap_resource_t *resource,
                               coap_session_t *session,
                               const coap_pdu_t *req, const coap_string_t *query,
-                              coap_pdu_t *resp, void *user_data)
+                              coap_pdu_t *resp)
 {
     char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
     int nseg = parse_segments(req, seg, COAP_MAX_SEG);
     if (nseg < 2 || strcmp(seg[1], "hostname") != 0) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_404_NOT_FOUND);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
 
     HostnameRequest hr = HostnameRequest_init_default;
     if (!decode_request(req, &hr, &HostnameRequest_msg)) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
     }
     if (f_mdns_set_hostname(hr.hostname) != ESP_OK) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_400_BAD_REQUEST);
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
     }
     static StatusResponse sr;
     sr = (StatusResponse)StatusResponse_init_default;
     sr.ok = true;
-    encode_response(resp, COAP_RESPONSE_CODE_204_CHANGED, &sr,
+    encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &sr,
                     &StatusResponse_msg);
 }
 
@@ -755,51 +755,51 @@ void f_coap_register_resources(coap_context_t *ctx, struct f_coap *h)
 
     /* /fans — GET (list/get-by-id), POST (create), PUT (update), DELETE */
     r = coap_resource_init(coap_make_str_const("fans"), 0);
-    coap_register_handler(r, COAP_REQUEST_METHOD_GET, handle_fan_get);
-    coap_register_handler(r, COAP_REQUEST_METHOD_POST, handle_fan_post);
-    coap_register_handler(r, COAP_REQUEST_METHOD_PUT, handle_fan_put);
-    coap_register_handler(r, COAP_REQUEST_METHOD_DELETE, handle_fan_delete);
+    coap_register_handler(r, COAP_REQUEST_CODE_GET, handle_fan_get);
+    coap_register_handler(r, COAP_REQUEST_CODE_POST, handle_fan_post);
+    coap_register_handler(r, COAP_REQUEST_CODE_PUT, handle_fan_put);
+    coap_register_handler(r, COAP_REQUEST_CODE_DELETE, handle_fan_delete);
     coap_resource_set_userdata(r, h);
     coap_add_resource(ctx, r);
 
     /* /sources — GET (list/get-by-id), POST (create/temp), DELETE */
     r = coap_resource_init(coap_make_str_const("sources"), 0);
-    coap_register_handler(r, COAP_REQUEST_METHOD_GET, handle_source_get);
-    coap_register_handler(r, COAP_REQUEST_METHOD_POST, handle_source_post);
-    coap_register_handler(r, COAP_REQUEST_METHOD_DELETE, handle_source_delete);
+    coap_register_handler(r, COAP_REQUEST_CODE_GET, handle_source_get);
+    coap_register_handler(r, COAP_REQUEST_CODE_POST, handle_source_post);
+    coap_register_handler(r, COAP_REQUEST_CODE_DELETE, handle_source_delete);
     coap_resource_set_userdata(r, h);
     coap_add_resource(ctx, r);
 
     /* /curves — GET (list/get-by-id), POST (create), PUT (update), DELETE */
     r = coap_resource_init(coap_make_str_const("curves"), 0);
-    coap_register_handler(r, COAP_REQUEST_METHOD_GET, handle_curve_get);
-    coap_register_handler(r, COAP_REQUEST_METHOD_POST, handle_curve_post);
-    coap_register_handler(r, COAP_REQUEST_METHOD_PUT, handle_curve_put);
-    coap_register_handler(r, COAP_REQUEST_METHOD_DELETE, handle_curve_delete);
+    coap_register_handler(r, COAP_REQUEST_CODE_GET, handle_curve_get);
+    coap_register_handler(r, COAP_REQUEST_CODE_POST, handle_curve_post);
+    coap_register_handler(r, COAP_REQUEST_CODE_PUT, handle_curve_put);
+    coap_register_handler(r, COAP_REQUEST_CODE_DELETE, handle_curve_delete);
     coap_resource_set_userdata(r, h);
     coap_add_resource(ctx, r);
 
     /* /schedules — GET (list), POST (create), PUT (update), DELETE */
     r = coap_resource_init(coap_make_str_const("schedules"), 0);
-    coap_register_handler(r, COAP_REQUEST_METHOD_GET, handle_schedule_get);
-    coap_register_handler(r, COAP_REQUEST_METHOD_POST, handle_schedule_post);
-    coap_register_handler(r, COAP_REQUEST_METHOD_PUT, handle_schedule_put);
-    coap_register_handler(r, COAP_REQUEST_METHOD_DELETE,
+    coap_register_handler(r, COAP_REQUEST_CODE_GET, handle_schedule_get);
+    coap_register_handler(r, COAP_REQUEST_CODE_POST, handle_schedule_post);
+    coap_register_handler(r, COAP_REQUEST_CODE_PUT, handle_schedule_put);
+    coap_register_handler(r, COAP_REQUEST_CODE_DELETE,
                           handle_schedule_delete);
     coap_resource_set_userdata(r, h);
     coap_add_resource(ctx, r);
 
     /* /wifi — GET (scan/status), POST (connect) */
     r = coap_resource_init(coap_make_str_const("wifi"), 0);
-    coap_register_handler(r, COAP_REQUEST_METHOD_GET, handle_wifi_get);
-    coap_register_handler(r, COAP_REQUEST_METHOD_POST, handle_wifi_post);
+    coap_register_handler(r, COAP_REQUEST_CODE_GET, handle_wifi_get);
+    coap_register_handler(r, COAP_REQUEST_CODE_POST, handle_wifi_post);
     coap_resource_set_userdata(r, h);
     coap_add_resource(ctx, r);
 
     /* /system — GET (info), PUT (hostname) */
     r = coap_resource_init(coap_make_str_const("system"), 0);
-    coap_register_handler(r, COAP_REQUEST_METHOD_GET, handle_system_get);
-    coap_register_handler(r, COAP_REQUEST_METHOD_PUT, handle_system_put);
+    coap_register_handler(r, COAP_REQUEST_CODE_GET, handle_system_get);
+    coap_register_handler(r, COAP_REQUEST_CODE_PUT, handle_system_put);
     coap_resource_set_userdata(r, h);
     coap_add_resource(ctx, r);
 }
