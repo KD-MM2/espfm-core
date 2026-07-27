@@ -700,6 +700,59 @@ static void handle_wifi_post(coap_resource_t *resource,
 }
 
 /* ------------------------------------------------------------------ */
+/*  Reboot timer (one-shot, 2s delay)                                 */
+/* ------------------------------------------------------------------ */
+
+static bool s_reboot_pending = false;
+static esp_timer_handle_t s_reboot_timer = NULL;
+
+static void reboot_timer_cb(void *arg)
+{
+    esp_restart();
+}
+
+static void handle_system_post(coap_resource_t *resource,
+                               coap_session_t *session,
+                               const coap_pdu_t *req, const coap_string_t *query,
+                               coap_pdu_t *resp)
+{
+    char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
+    int nseg = parse_segments(req, seg, COAP_MAX_SEG);
+    if (nseg < 2 || strcmp(seg[1], "reboot") != 0) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
+        return;
+    }
+
+    if (s_reboot_pending) {
+        static StatusResponse sr;
+        sr = (StatusResponse)StatusResponse_init_default;
+        sr.ok = false;
+        snprintf(sr.error_msg, sizeof(sr.error_msg), "reboot pending");
+        encode_response(resp, COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE,
+                        &sr, &StatusResponse_msg);
+        return;
+    }
+
+    if (!s_reboot_timer) {
+        const esp_timer_create_args_t args = {
+            .callback = reboot_timer_cb,
+            .name = "coap_reboot",
+        };
+        ESP_ERROR_CHECK(esp_timer_create(&args, &s_reboot_timer));
+    }
+
+    s_reboot_pending = true;
+    esp_timer_start_once(s_reboot_timer, 2000000); /* 2 seconds */
+
+    static StatusResponse sr;
+    sr = (StatusResponse)StatusResponse_init_default;
+    sr.ok = true;
+    encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &sr, &StatusResponse_msg);
+
+    ESP_LOGI(TAG, "Reboot scheduled in 2 seconds");
+}
+
+/* ------------------------------------------------------------------ */
 /*  System handler: /system/{info,hostname}                            */
 /* ------------------------------------------------------------------ */
 
@@ -816,6 +869,8 @@ void f_coap_register_resources(coap_context_t *ctx, struct f_coap *h)
     add_resource(ctx, h, "system/info", handle_system_get, NULL, NULL, NULL);
     /* /system/hostname */
     add_resource(ctx, h, "system/hostname", NULL, NULL, handle_system_put, NULL);
+    /* /system/reboot */
+    add_resource(ctx, h, "system/reboot", NULL, handle_system_post, NULL, NULL);
 
     /* /wifi/scan */
     add_resource(ctx, h, "wifi/scan", handle_wifi_get, NULL, NULL, NULL);
