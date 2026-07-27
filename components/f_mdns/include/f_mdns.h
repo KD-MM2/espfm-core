@@ -37,6 +37,14 @@ esp_err_t f_mdns_deinit(f_mdns_handle_t handle);
  */
 esp_err_t f_mdns_set_hostname(const char *hostname);
 
+/**
+ * @brief Get the current hostname.
+ *
+ * Returns pointer to internal buffer (valid for handle lifetime).
+ * Returns "espfm" if handle is NULL.
+ */
+const char *f_mdns_get_hostname(f_mdns_handle_t handle);
+
 #ifdef __cplusplus
 }
 #endif

@@ -5,6 +5,7 @@
 #include "f_curve.h"
 #include "f_schedule.h"
 #include "f_config.h"
+#include "f_mdns.h"
 #include "f_constraints.h"
 #include "espfm_conv.h"
 #include "espfm.pb.h"
@@ -541,6 +542,31 @@ static void handle_wifi(struct f_coap *h, coap_req_ctx_t *ctx)
 /*  System handler: /system/info                                       */
 /* ------------------------------------------------------------------ */
 
+static void handle_system_put(struct f_coap *h, coap_req_ctx_t *ctx)
+{
+    if (ctx->nseg < 2 || strcmp(ctx->seg[1], "hostname") != 0) {
+        ctx->rsp_code = COAP_RSPCODE_NOT_FOUND;
+        return;
+    }
+    HostnameRequest req = HostnameRequest_init_default;
+    pb_istream_t stream = pb_istream_from_buffer(ctx->payload, ctx->payload_len);
+    if (!pb_decode(&stream, &HostnameRequest_msg, &req)) {
+        ctx->rsp_code = COAP_RSPCODE_BAD_REQUEST;
+        return;
+    }
+    esp_err_t err = f_mdns_set_hostname(req.hostname);
+    if (err != ESP_OK) {
+        ctx->rsp_code = COAP_RSPCODE_BAD_REQUEST;
+        return;
+    }
+    static StatusResponse sr;
+    sr = (StatusResponse)StatusResponse_init_default;
+    sr.ok = true;
+    ctx->rsp_msg = &sr;
+    ctx->rsp_desc = &StatusResponse_msg;
+    ctx->rsp_code = MAKE_RSPCODE(2, 4);  /* 2.04 Changed */
+}
+
 static void handle_system(struct f_coap *h, coap_req_ctx_t *ctx)
 {
     if (ctx->nseg < 2 || strcmp(ctx->seg[1], "info") != 0) {
@@ -557,6 +583,11 @@ static void handle_system(struct f_coap *h, coap_req_ctx_t *ctx)
     si.source_count  = h->source  ? f_source_get_count(h->source)   : 0;
     si.curve_count   = h->curve   ? f_curve_get_count(h->curve)     : 0;
     si.schedule_count = h->schedule ? f_schedule_get_count(h->schedule) : 0;
+    const char *hostname = f_mdns_get_hostname(h->mdns);
+    if (hostname) {
+        strncpy(si.hostname, hostname, sizeof(si.hostname) - 1);
+        si.hostname[sizeof(si.hostname) - 1] = '\0';
+    }
     ctx->rsp_msg = &si;
     ctx->rsp_desc = &SystemInfo_msg;
 }
@@ -601,6 +632,7 @@ static const coap_route_entry_t routes[] = {
     {"schedules", COAP_METHOD_GET,    1, handle_schedule_list},
     {"wifi",      COAP_METHOD_GET,    2, handle_wifi},
     {"wifi",      COAP_METHOD_POST,   2, handle_wifi},
+    {"system",    COAP_METHOD_PUT,    2, handle_system_put},
     {"system",    COAP_METHOD_GET,    2, handle_system},
 };
 #define NUM_ROUTES (sizeof(routes) / sizeof(routes[0]))

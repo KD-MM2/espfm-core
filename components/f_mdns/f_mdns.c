@@ -165,6 +165,11 @@ esp_err_t f_mdns_deinit(f_mdns_handle_t handle) {
     return ESP_OK;
 }
 
+const char *f_mdns_get_hostname(f_mdns_handle_t handle) {
+    if (!handle) return "espfm";
+    return handle->hostname;
+}
+
 esp_err_t f_mdns_set_hostname(const char *hostname) {
     if (!validate_hostname(hostname)) {
         ESP_LOGE(TAG, "Invalid hostname: '%s' (RFC 1035: 1-63 lowercase alphanumeric + hyphens)",

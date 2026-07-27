@@ -2,6 +2,7 @@
 #include "f_coap.h"
 #include "f_coap_internal.h"
 #include "f_constraints.h"
+#include "f_mdns.h"
 #include "esp_log.h"
 #include "esp_event.h"
 #include "esp_wifi.h"
@@ -102,7 +103,8 @@ static void on_ap_stop(void *arg, esp_event_base_t base,
 /* ---- Public API ---- */
 esp_err_t f_coap_init(f_coap_handle_t *handle, f_fan_handle_t fan,
                       f_source_handle_t source, f_curve_handle_t curve,
-                      f_schedule_handle_t schedule, f_config_handle_t config)
+                      f_schedule_handle_t schedule, f_config_handle_t config,
+                      f_mdns_handle_t mdns)
 {
     if (!handle) return ESP_ERR_INVALID_ARG;
 
@@ -115,6 +117,7 @@ esp_err_t f_coap_init(f_coap_handle_t *handle, f_fan_handle_t fan,
     h->curve = curve;
     h->schedule = schedule;
     h->config = config;
+    h->mdns = mdns;
     h->sock = -1;
 
     esp_event_handler_register(ESPFM_EVENT, ESPFM_EVENT_WIFI_CONNECTED,
