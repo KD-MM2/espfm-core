@@ -57,7 +57,8 @@ void espfm_source_to_pb(const f_source_info_t *si, SourceInfo *pb)
     pb->type   = source_type_to_pb(si->type);
     pb->status = (SourceStatus)si->status;
     pb->temp_c = si->temp_c;
-    pb->gpio   = si->gpio;
+    pb->gpio              = si->gpio;
+    pb->ds18b20_rom_code  = si->ds18b20_rom_code;
     strncpy(pb->name, si->name, sizeof(pb->name) - 1);
     pb->name[sizeof(pb->name) - 1] = '\0';
 }
