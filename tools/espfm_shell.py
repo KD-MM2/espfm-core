@@ -1645,8 +1645,12 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
             "fans": (
                 "fans list                              — List all fans\n"
                 "  fans get <id>                        — Show fan detail\n"
-                "  fans create --pwm <gpio> --name <n> [--source N] [--curve N] [--mode auto|manual] ...  — Create fan\n"
-                "  fans update <id> [--duty N] [--mode auto|manual] ...  — Update fan\n"
+                "  fans create --pwm <gpio> --name <n> [--tach <gpio>] [--source N]\n"
+                "              [--curve N] [--mode auto|manual] [--inverted]\n"
+                "              [--group N] [--enabled] — Create fan\n"
+                "  fans update <id> [--duty N] [--mode auto|manual] [--source N]\n"
+                "                   [--curve N] [--schedule N] [--group N]\n"
+                "                   [--inverted] [--enabled] — Update fan\n"
                 "  fans enable <id>                     — Enable a fan\n"
                 "  fans disable <id>                    — Disable a fan\n"
                 "  fans delete <id>                     — Delete fan"
@@ -1654,7 +1658,8 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
             "sources": (
                 "sources list                           — List all sources\n"
                 "  sources get <id>                     — Show source detail\n"
-                "  sources create --type <t> --name <n> — Create source\n"
+                "  sources create --type <ntc|ds18b20|manual> --name <n>\n"
+                "                [--gpio N] [--rom HEX] — Create source\n"
                 "  sources temp <id> <temp_c>           — Set manual temperature\n"
                 "  sources delete <id>                  — Delete source"
             ),
