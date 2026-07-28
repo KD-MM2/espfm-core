@@ -117,6 +117,20 @@ esp_err_t f_ledc_get_duty(f_ledc_handle_t handle, uint8_t channel_id, float *dut
     return ESP_OK;
 }
 
+esp_err_t f_ledc_stop_channel(f_ledc_handle_t handle, uint8_t channel_id, int idle_level)
+{
+    if (handle == NULL || channel_id >= F_LEDC_MAX_CHANNELS) return ESP_ERR_INVALID_ARG;
+    if (!handle->channel_in_use[channel_id]) return ESP_ERR_INVALID_STATE;
+
+    esp_err_t err = ledc_stop(handle->speed_mode, channel_id, idle_level & 1);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ledc_stop ch%d failed: %s", channel_id, esp_err_to_name(err));
+        return err;
+    }
+    handle->current_duty[channel_id] = idle_level ? 100.0f : 0.0f;
+    return ESP_OK;
+}
+
 esp_err_t f_ledc_remove_channel(f_ledc_handle_t handle, uint8_t channel_id)
 {
     if (handle == NULL || channel_id >= F_LEDC_MAX_CHANNELS) return ESP_ERR_INVALID_ARG;

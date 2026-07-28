@@ -238,20 +238,18 @@ esp_err_t f_fan_set_enabled(f_fan_handle_t handle, uint8_t id, bool enabled)
 
     if (!enabled) {
         handle->channels[id].duty = 0;
-        uint8_t effective = handle->channels[id].inverted ? 100 : 0;
-        ESP_LOGI(TAG, "Disabling fan %d: inverted=%d, effective=%d%%, ledc_ch=%d", id,
-                 handle->channels[id].inverted, effective, handle->ledc_channel_id[id]);
-        esp_err_t ledc_err =
-            f_ledc_set_duty(handle->ledc, handle->ledc_channel_id[id], (float)effective);
-        if (ledc_err != ESP_OK) {
-            ESP_LOGE(TAG, "f_ledc_set_duty(%d%%) failed for fan %d: %s", effective, id,
-                     esp_err_to_name(ledc_err));
-        } else {
-            /* Verify the duty was actually applied */
-            float readback = 0;
-            f_ledc_get_duty(handle->ledc, handle->ledc_channel_id[id], &readback);
-            ESP_LOGI(TAG, "Fan %d LEDC duty readback: %.1f%% (expected %d%%)", id, readback, effective);
+        /* Stop LEDC channel — force GPIO to idle level */
+        int idle_level = handle->channels[id].inverted ? 1 : 0;
+        ESP_LOGI(TAG, "Disabling fan %d: inverted=%d, ledc_ch=%d, idle_level=%d", id,
+                 handle->channels[id].inverted, handle->ledc_channel_id[id], idle_level);
+        esp_err_t err = f_ledc_stop_channel(handle->ledc, handle->ledc_channel_id[id], idle_level);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "f_ledc_stop_channel failed for fan %d: %s", id, esp_err_to_name(err));
         }
+    } else {
+        /* Re-enable: restart LEDC channel at 0% duty, control loop will set proper duty */
+        ESP_LOGI(TAG, "Enabling fan %d: restarting LEDC ch %d", id, handle->ledc_channel_id[id]);
+        f_ledc_set_duty(handle->ledc, handle->ledc_channel_id[id], 0.0f);
     }
 
 cleanup:
