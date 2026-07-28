@@ -163,6 +163,11 @@ static void _ctrl_task(void *arg)
             }
         }
 
+        /* Trigger DS18B20 batch conversion (800ms once for all sensors) */
+        if (ctrl->source) {
+            f_source_trigger_ds18b20(ctrl->source);
+        }
+
         f_fan_for_each(ctrl->fan, _ctrl_callback, ctrl);
 
         /* Propagate master duty to followers in each group */
