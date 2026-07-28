@@ -1,5 +1,7 @@
 #include "f_adc.h"
 #include "esp_adc/adc_oneshot.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
 #include "esp_log.h"
 #include <math.h>
 
@@ -7,6 +9,7 @@ static const char *TAG = "f_adc";
 
 struct f_adc {
     adc_oneshot_unit_handle_t unit;
+    adc_cali_handle_t cali;
     uint16_t configured_channels; /* bitmask of already-configured channels */
 };
 
@@ -22,6 +25,36 @@ esp_err_t f_adc_init(f_adc_handle_t *handle)
         .ulp_mode = ADC_ULP_MODE_DISABLE,
     };
     ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_cfg, &h->unit));
+
+    /* Create calibration handle */
+#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
+    {
+        adc_cali_curve_fitting_config_t cali_cfg = {
+            .unit_id  = ADC_UNIT_1,
+            .chan     = ADC_CHANNEL_0,
+            .atten    = ADC_ATTEN_DB_12,
+            .bitwidth = ADC_BITWIDTH_12,
+        };
+        if (adc_cali_create_scheme_curve_fitting(&cali_cfg, &h->cali) == ESP_OK) {
+            ESP_LOGI(TAG, "ADC calibration: curve fitting");
+        }
+    }
+#elif ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+    {
+        adc_cali_line_fitting_config_t cali_cfg = {
+            .unit_id  = ADC_UNIT_1,
+            .atten    = ADC_ATTEN_DB_12,
+            .bitwidth = ADC_BITWIDTH_12,
+        };
+        if (adc_cali_create_scheme_line_fitting(&cali_cfg, &h->cali) == ESP_OK) {
+            ESP_LOGI(TAG, "ADC calibration: line fitting");
+        }
+    }
+#endif
+    if (h->cali == NULL) {
+        ESP_LOGW(TAG, "ADC calibration not available, using linear fallback");
+    }
+
     *handle = h;
     ESP_LOGI(TAG, "ADC oneshot initialized (ADC1)");
     return ESP_OK;
@@ -52,10 +85,19 @@ esp_err_t f_adc_read_raw(f_adc_handle_t handle, uint8_t gpio, int *raw_out)
     return ESP_OK;
 }
 
-esp_err_t f_adc_raw_to_voltage(int raw, uint16_t vref_mv, float *voltage_out)
+esp_err_t f_adc_raw_to_voltage(f_adc_handle_t handle, int raw, uint16_t vref_mv, float *voltage_out)
 {
-    if (voltage_out == NULL) return ESP_ERR_INVALID_ARG;
-    *voltage_out = (float)raw * (float)vref_mv / 4095.0f / 1000.0f;
+    if (handle == NULL || voltage_out == NULL) return ESP_ERR_INVALID_ARG;
+
+    if (handle->cali) {
+        int voltage_mv;
+        esp_err_t err = adc_cali_raw_to_voltage(handle->cali, raw, &voltage_mv);
+        if (err != ESP_OK) return err;
+        *voltage_out = (float)voltage_mv / 1000.0f;
+    } else {
+        /* Linear fallback */
+        *voltage_out = (float)raw * (float)vref_mv / 4095.0f / 1000.0f;
+    }
     return ESP_OK;
 }
 

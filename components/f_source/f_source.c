@@ -188,7 +188,7 @@ esp_err_t f_source_get_reading(f_source_handle_t handle, uint8_t id, float *temp
             goto cleanup;
         }
         float voltage;
-        f_adc_raw_to_voltage(raw, NTC_VREF_MV, &voltage);
+        f_adc_raw_to_voltage(handle->adc, raw, NTC_VREF_MV, &voltage);
         f_adc_ntc_temp(voltage, NTC_VCC, NTC_R_DIV, NTC_BETA, NTC_R0, NTC_T0_K, &s->temp_c);
         s->last_update_us = esp_timer_get_time();
         s->status         = SOURCE_STATUS_VALID;
