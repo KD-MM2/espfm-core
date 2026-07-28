@@ -73,11 +73,11 @@ esp_err_t f_ds18b20_scan(f_ds18b20_handle_t handle, uint8_t *count_out)
         if (ds18b20_new_device_from_enumeration(&next_dev, &ds_cfg, &dev) == ESP_OK) {
             onewire_device_address_t addr;
             ds18b20_get_device_address(dev, &addr);
-            handle->devices[handle->device_count] = dev;
+            handle->devices[handle->device_count]   = dev;
             handle->rom_codes[handle->device_count] = addr;
             handle->device_count++;
-            ESP_LOGI(TAG, "DS18B20 found: sensor %d, ROM=0x%016llX",
-                     handle->device_count - 1, (unsigned long long)addr);
+            ESP_LOGI(TAG, "DS18B20 found: sensor %d, ROM=0x%016llX", handle->device_count - 1,
+                     (unsigned long long)addr);
             if (handle->device_count >= F_DS18B20_MAX_DEVICES) {
                 ESP_LOGI(TAG, "Max devices reached, stopping scan");
                 break;

@@ -248,7 +248,7 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan, f_sour
     /* -- Sources -- */
     if (cfg->has_sources) {
         for (pb_size_t i = 0; i < cfg->sources.sources_count; i++) {
-            SourceInfo *pb  = &cfg->sources.sources[i];
+            SourceInfo *pb      = &cfg->sources.sources[i];
             source_type_t stype = pb_to_source_type(pb->type);
             uint8_t new_id;
 

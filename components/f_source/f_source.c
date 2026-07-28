@@ -35,7 +35,7 @@ esp_err_t f_source_init(f_source_handle_t *handle, f_adc_handle_t adc, f_ds18b20
     if (h == NULL) return ESP_ERR_NO_MEM;
     h->adc     = adc;
     h->ds18b20 = ds18b20;
-    h->mutex = xSemaphoreCreateRecursiveMutex();
+    h->mutex   = xSemaphoreCreateRecursiveMutex();
     if (h->mutex == NULL) {
         free(h);
         return ESP_ERR_NO_MEM;
@@ -92,7 +92,7 @@ cleanup:
 }
 
 esp_err_t f_source_add_ds18b20(f_source_handle_t handle, uint64_t rom_code, const char *name,
-                                uint8_t *id_out)
+                               uint8_t *id_out)
 {
     if (handle == NULL || name == NULL || id_out == NULL) return ESP_ERR_INVALID_ARG;
 
@@ -122,7 +122,7 @@ esp_err_t f_source_add_ds18b20(f_source_handle_t handle, uint64_t rom_code, cons
     s->ds18b20_rom_code         = rom_code;
     s->last_update_us           = 0;
 
-    handle->slot_used[slot] = true;
+    handle->slot_used[slot]     = true;
     handle->count++;
     *id_out = (uint8_t)slot;
     ESP_LOGI(TAG, "Source %d added: '%s' type=DS18B20 ROM=0x%016llX", slot, s->name,

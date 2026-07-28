@@ -216,8 +216,7 @@ static bool ds18b20_encode_cb(pb_ostream_t *stream, const pb_field_t *field, voi
 }
 
 static void handle_ds18b20_scan(coap_resource_t *resource, coap_session_t *session,
-                                const coap_pdu_t *req, const coap_string_t *query,
-                                coap_pdu_t *resp)
+                                const coap_pdu_t *req, const coap_string_t *query, coap_pdu_t *resp)
 {
     struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
     if (h->ds18b20 == NULL) {
@@ -236,7 +235,7 @@ static void handle_ds18b20_scan(coap_resource_t *resource, coap_session_t *sessi
 
     static Ds18b20Device devices[F_DS18B20_MAX_DEVICES];
     for (uint8_t i = 0; i < count; i++) {
-        devices[i] = (Ds18b20Device)Ds18b20Device_init_default;
+        devices[i]       = (Ds18b20Device)Ds18b20Device_init_default;
         devices[i].index = i;
         f_ds18b20_get_rom_code(h->ds18b20, i, &devices[i].rom_code);
         float temp;
@@ -248,10 +247,10 @@ static void handle_ds18b20_scan(coap_resource_t *resource, coap_session_t *sessi
     ds18b20_cb_ctx_t cb_ctx = {.devs = devices, .count = count};
 
     static Ds18b20ScanResponse sr;
-    sr                = (Ds18b20ScanResponse)Ds18b20ScanResponse_init_default;
+    sr                      = (Ds18b20ScanResponse)Ds18b20ScanResponse_init_default;
     sr.devices.funcs.encode = ds18b20_encode_cb;
-    sr.devices.arg    = &cb_ctx;
-    sr.device_count   = count;
+    sr.devices.arg          = &cb_ctx;
+    sr.device_count         = count;
 
     encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &sr, &Ds18b20ScanResponse_msg);
 }

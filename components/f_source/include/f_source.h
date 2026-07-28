@@ -37,7 +37,7 @@ esp_err_t f_source_get_info(f_source_handle_t handle, uint8_t id, f_source_info_
 esp_err_t f_source_for_each(f_source_handle_t handle, void (*cb)(const f_source_info_t *, void *),
                             void *ctx);
 esp_err_t f_source_add_ds18b20(f_source_handle_t handle, uint64_t rom_code, const char *name,
-                                uint8_t *id_out);
+                               uint8_t *id_out);
 esp_err_t f_source_trigger_ds18b20(f_source_handle_t handle);
 
 #ifdef __cplusplus

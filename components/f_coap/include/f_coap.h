@@ -19,8 +19,7 @@ typedef struct f_coap *f_coap_handle_t;
 
 esp_err_t f_coap_init(f_coap_handle_t *handle, f_fan_handle_t fan, f_source_handle_t source,
                       f_curve_handle_t curve, f_schedule_handle_t schedule,
-                      f_config_handle_t config, f_mdns_handle_t mdns,
-                      f_ds18b20_handle_t ds18b20);
+                      f_config_handle_t config, f_mdns_handle_t mdns, f_ds18b20_handle_t ds18b20);
 esp_err_t f_coap_start(f_coap_handle_t handle);
 esp_err_t f_coap_stop(f_coap_handle_t handle);
 esp_err_t f_coap_deinit(f_coap_handle_t handle);
