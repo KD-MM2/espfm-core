@@ -93,7 +93,7 @@ void app_main(void)
 
     /* --- CoAP Server (UDP :5683, Protobuf, WiFi-aware lifecycle) --- */
     f_coap_handle_t coap;
-    ESP_ERROR_CHECK(f_coap_init(&coap, fan, source, curve, schedule, config, mdns));
+    ESP_ERROR_CHECK(f_coap_init(&coap, fan, source, curve, schedule, config, mdns, ds18b20));
 
     /* --- WiFi Provisioning (captive portal on STA failure) --- */
     f_provision_handle_t provision;
