@@ -4,7 +4,21 @@
 
 static const char *TAG = "f_gpio";
 
-/* Pins reserved by ESP32-S3 hardware */
+/* Pins reserved by hardware — varies by target chip */
+#if CONFIG_IDF_TARGET_ESP32
+static const uint8_t reserved_pins[] = {
+    1,  /* UART0 TX (USB debug console) */
+    3,  /* UART0 RX (USB debug console) */
+    6,  /* Flash SPI CLK */
+    7,  /* Flash SPI Q (D0) */
+    8,  /* Flash SPI D (D1) */
+    9,  /* Flash SPI WP# (D2) */
+    10, /* Flash SPI HOLD# (D3) */
+    11, /* Flash SPI CS# */
+    16, /* PSRAM SPI (WROVER) */
+    17, /* PSRAM SPI (WROVER) */
+};
+#elif CONFIG_IDF_TARGET_ESP32S3
 static const uint8_t reserved_pins[] = {
     0,  /* U0TXD (console) */
     1,  /* U0RXD (console) */
@@ -15,6 +29,9 @@ static const uint8_t reserved_pins[] = {
     45, /* PSRAM */
     46, /* PSRAM */
 };
+#else
+#error "Unsupported IDF target for f_gpio"
+#endif
 #define NUM_RESERVED (sizeof(reserved_pins) / sizeof(reserved_pins[0]))
 
 struct f_gpio {

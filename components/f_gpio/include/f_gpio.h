@@ -14,7 +14,13 @@ extern "C" {
 #define F_GPIO_CAP_I2C     (1 << 4)
 #define F_GPIO_CAP_UART    (1 << 5)
 
-#define F_GPIO_MAX_PINS    48
+#if CONFIG_IDF_TARGET_ESP32
+#define F_GPIO_MAX_PINS 40 /* GPIO 0-39 */
+#elif CONFIG_IDF_TARGET_ESP32S3
+#define F_GPIO_MAX_PINS 48 /* GPIO 0-47 */
+#else
+#error "Unsupported IDF target for f_gpio"
+#endif
 
 typedef struct f_gpio *f_gpio_handle_t;
 
