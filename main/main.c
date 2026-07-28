@@ -55,7 +55,9 @@ void app_main(void)
     ESP_ERROR_CHECK(f_adc_init(&adc));
 
     f_ds18b20_handle_t ds18b20 = NULL;
-    /* DS18B20 init skipped if GPIO not configured */
+#if CONFIG_ESPFM_DS18B20_GPIO >= 0
+    ESP_ERROR_CHECK(f_ds18b20_init(&ds18b20, (uint8_t)CONFIG_ESPFM_DS18B20_GPIO));
+#endif
 
     f_ledc_handle_t ledc;
     ESP_ERROR_CHECK(f_ledc_init(&ledc, 25000, 11));
@@ -113,9 +115,9 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_task_wdt_delete(NULL));
     ESP_LOGI(TAG, "TWDT: main task unsubscribed");
 
-    ESP_LOGI(TAG, "Boot complete — %d fans, %d sources, %d curves, %d schedules",
+    ESP_LOGI(TAG, "Boot complete — %d fans, %d sources, %d curves, %d schedules, DS18B20: %s",
              f_fan_get_count(fan), f_source_get_count(source), f_curve_get_count(curve),
-             f_schedule_get_count(schedule));
+             f_schedule_get_count(schedule), ds18b20 ? "enabled" : "disabled");
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(60000));
     }
