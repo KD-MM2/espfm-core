@@ -139,7 +139,9 @@ esp_err_t f_fan_set_duty(f_fan_handle_t handle, uint8_t id, uint8_t duty)
     }
     if (duty > 100) duty = 100;
 
-    f_fan_info_t *ch  = &handle->channels[id];
+    f_fan_info_t *ch = &handle->channels[id];
+    if (!ch->enabled) goto cleanup;
+
     uint8_t effective = ch->inverted ? (100 - duty) : duty;
     float pct         = (float)effective;
 
@@ -247,9 +249,11 @@ esp_err_t f_fan_set_enabled(f_fan_handle_t handle, uint8_t id, bool enabled)
             ESP_LOGE(TAG, "f_ledc_stop_channel failed for fan %d: %s", id, esp_err_to_name(err));
         }
     } else {
-        /* Re-enable: restart LEDC channel at 0% duty, control loop will set proper duty */
-        ESP_LOGI(TAG, "Enabling fan %d: restarting LEDC ch %d", id, handle->ledc_channel_id[id]);
-        f_ledc_set_duty(handle->ledc, handle->ledc_channel_id[id], 0.0f);
+        /* Re-enable: restart LEDC channel at "off" level, control loop sets proper duty */
+        uint8_t off_duty = handle->channels[id].inverted ? 100 : 0;
+        ESP_LOGI(TAG, "Enabling fan %d: restarting LEDC ch %d at %d%%", id,
+                 handle->ledc_channel_id[id], off_duty);
+        f_ledc_set_duty(handle->ledc, handle->ledc_channel_id[id], (float)off_duty);
     }
 
 cleanup:
@@ -269,6 +273,7 @@ esp_err_t f_fan_set_inverted(f_fan_handle_t handle, uint8_t id, bool inverted)
         goto cleanup;
     }
     handle->channels[id].inverted = inverted;
+    if (!handle->channels[id].enabled) goto cleanup;
     /* Re-apply current duty with new inversion */
     uint8_t cur       = handle->channels[id].duty;
     uint8_t effective = inverted ? (100 - cur) : cur;
