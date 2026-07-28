@@ -248,19 +248,24 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan, f_sour
     /* -- Sources -- */
     if (cfg->has_sources) {
         for (pb_size_t i = 0; i < cfg->sources.sources_count; i++) {
-            SourceInfo *pb = &cfg->sources.sources[i];
-            /* Manual sources use gpio=255 (GPIO_NONE), skip GPIO validation */
-            if (pb_to_source_type(pb->type) != SOURCE_TYPE_MANUAL &&
-                f_constraints_gpio((int)pb->gpio, NULL) != ESP_OK)
-                continue;
+            SourceInfo *pb  = &cfg->sources.sources[i];
+            source_type_t stype = pb_to_source_type(pb->type);
             uint8_t new_id;
-            if (f_source_add(source, pb_to_source_type(pb->type), (uint8_t)pb->gpio, pb->name,
-                             &new_id) == ESP_OK) {
-                src_count++;
-                /* Restore manual temperature from saved config */
-                if (pb_to_source_type(pb->type) == SOURCE_TYPE_MANUAL && pb->temp_c != 0.0f)
+
+            if (stype == SOURCE_TYPE_DS18B20) {
+                if (f_source_add_ds18b20(source, pb->ds18b20_rom_code, pb->name, &new_id) != ESP_OK)
+                    continue;
+            } else {
+                /* Manual sources use gpio=255 (GPIO_NONE), skip GPIO validation */
+                if (stype != SOURCE_TYPE_MANUAL &&
+                    f_constraints_gpio((int)pb->gpio, NULL) != ESP_OK)
+                    continue;
+                if (f_source_add(source, stype, (uint8_t)pb->gpio, pb->name, &new_id) != ESP_OK)
+                    continue;
+                if (stype == SOURCE_TYPE_MANUAL && pb->temp_c != 0.0f)
                     f_source_update_manual(source, new_id, pb->temp_c);
             }
+            src_count++;
         }
     }
 
