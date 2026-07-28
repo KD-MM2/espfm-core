@@ -708,14 +708,21 @@ def _handle_sources(shell: ESPFMShell, args: list[str]) -> None:
             flags = _parse_flags(args[1:])
             if "type" not in flags or "name" not in flags:
                 console.print(
-                    "[yellow]Usage: sources create --type <ntc|ds18b20|manual> --name <name> [--gpio N][/yellow]"
+                    "[yellow]Usage: sources create --type <ntc|ds18b20|manual> --name <name> "
+                    "[--gpio N] [--rom HEX_ROM_CODE][/yellow]"
                 )
                 return
-            s = client.sources_create(
-                source_type=_resolve_enum(flags["type"], SOURCE_TYPE_VALUES),
-                name=flags["name"],
+            source_type = _resolve_enum(flags["type"], SOURCE_TYPE_VALUES)
+            # Parse ROM code for DS18B20 sources (hex string with optional colons)
+            rom_code = int(flags["rom"].replace(":", ""), 16) if "rom" in flags else 0
+            req = pb.SourceCreateRequest(
+                type=source_type, name=flags["name"],
                 gpio=int(flags.get("gpio", 255)),
             )
+            if source_type == 1 and rom_code:  # 1 = ds18b20
+                req.ds18b20_rom_code = rom_code
+            _, data = client._post("/sources", req)
+            s = client._decode(pb.SourceInfo, data)
             console.print(
                 f"[green]Created source {s.id}:[/green] {s.name} ({SOURCE_TYPE_LABELS.get(s.type, '?')})"
             )
@@ -1009,6 +1016,44 @@ def _handle_system(shell: ESPFMShell, args: list[str]) -> None:
     else:
         console.print(f"[yellow]Unknown system action: {action}[/yellow]")
         console.print("[yellow]Usage: system <info|reboot>[/yellow]")
+
+
+def _handle_ds18b20(shell: ESPFMShell, args: list[str]) -> None:
+    """DS18B20 sensor operations: ds18b20 scan."""
+    if not args:
+        console.print("[yellow]Usage: ds18b20 scan[/yellow]")
+        return
+    action = args[0]
+    if not _check_connected(shell):
+        return
+    client = shell.client
+
+    try:
+        if action == "scan":
+            resp = client._decode(pb.Ds18b20ScanResponse, client._get("/ds18b20/scan")[1])
+
+            if resp.device_count == 0:
+                console.print("[dim]No DS18B20 devices found.[/dim]")
+                return
+
+            table = Table(title="DS18B20 Devices")
+            table.add_column("Index", justify="right")
+            table.add_column("ROM Code", style="cyan")
+            table.add_column("Temperature", justify="right")
+
+            for dev in resp.devices:
+                rom_hex = f"{dev.rom_code:016X}"
+                rom_formatted = ":".join(rom_hex[i:i+2] for i in range(0, 16, 2))
+                table.add_row(str(dev.index), rom_formatted, f"{dev.temp_c:.1f} C")
+
+            console.print(table)
+        else:
+            console.print(f"[yellow]Unknown ds18b20 action: {action}[/yellow]")
+
+    except CoapError as e:
+        console.print(f"[red]{_error_message(e)}[/red]")
+    except (ValueError, IndexError) as e:
+        console.print(f"[red]Invalid argument: {e}[/red]")
 
 
 def _handle_devices(shell: ESPFMShell, args: list[str]) -> None:
@@ -1615,6 +1660,9 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
                 "system info    — Show version, uptime, heap, entity counts\n"
                 "  system reboot  — Reboot the device (2s delay)"
             ),
+            "ds18b20": (
+                "ds18b20 scan  — Scan for DS18B20 devices on the 1-Wire bus"
+            ),
             "devices": (
                 "devices scan [--timeout N]            — Scan LAN for ESPFM devices (mDNS)\n"
                 "  devices connect XXYY                — Connect to device by MAC suffix\n"
@@ -1645,6 +1693,7 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
   schedules  list | create | update | delete
   wifi       scan | status | connect
   system     info | reboot
+  ds18b20    scan
   devices    scan | connect | update
 
 [bold cyan]Data Operations[/bold cyan]
@@ -1711,7 +1760,7 @@ class ESPFMShell:
         completer = WordCompleter(
             [
                 "connect", "disconnect", "help", "exit", "quit",
-                "fans", "sources", "curves", "schedules", "wifi", "system", "devices",
+                "fans", "sources", "curves", "schedules", "wifi", "system", "devices", "ds18b20",
                 "dashboard", "export", "import",
                 "list", "get", "create", "update", "delete", "enable", "disable", "temp",
                 "scan", "status", "info", "reboot",
@@ -1719,7 +1768,7 @@ class ESPFMShell:
                 "--duty", "--mode", "--source", "--curve", "--schedule",
                 "--group", "--inverted", "--enabled",
                 "--points", "--fan", "--start", "--end",
-                "--ssid", "--pass", "--port", "--timeout", "--no-delete",
+                "--rom", "--ssid", "--pass", "--port", "--timeout", "--no-delete",
                 "--hostname",
                 "auto", "manual", "ntc", "ds18b20", "true", "false",
             ],
@@ -1778,6 +1827,8 @@ class ESPFMShell:
                     _handle_wifi(self, args)
                 elif cmd == "system":
                     _handle_system(self, args)
+                elif cmd == "ds18b20":
+                    _handle_ds18b20(self, args)
                 elif cmd == "devices":
                     _handle_devices(self, args)
                 elif cmd == "dashboard":
