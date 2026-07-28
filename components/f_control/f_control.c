@@ -55,10 +55,11 @@ static uint8_t apply_ramp(uint8_t current, uint8_t target, uint8_t max_up, uint8
 static void _ctrl_callback(const f_fan_info_t *fan, void *ctx)
 {
     f_control_handle_t ctrl = (f_control_handle_t)ctx;
-    if (!fan->enabled) return;
 
-    /* Always update RPM for every enabled fan, regardless of mode */
+    /* Always update RPM — lets disabled fans decay to 0 naturally */
     f_fan_update_rpm(ctrl->fan, fan->id);
+
+    if (!fan->enabled) return;
 
     /* Stall detection applies to ALL fans (manual or auto) */
     f_fan_info_t info;
