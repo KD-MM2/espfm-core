@@ -563,13 +563,35 @@ def _handle_fans(shell: ESPFMShell, args: list[str]) -> None:
         elif action == "create":
             flags = _parse_flags(args[1:])
             if "pwm" not in flags or "name" not in flags:
-                console.print("[yellow]Usage: fans create --pwm <gpio> --name <name> [--tach <gpio>][/yellow]")
+                console.print(
+                    "[yellow]Usage: fans create --pwm <gpio> --name <name> [--tach <gpio>] "
+                    "[--source N] [--curve N] [--mode auto|manual] [--inverted true|false] "
+                    "[--group N] [--enabled true|false][/yellow]"
+                )
                 return
             f = client.fans_create(
                 pwm_gpio=int(flags["pwm"]),
                 name=flags["name"],
                 tach_gpio=int(flags.get("tach", 255)),
             )
+            # Apply optional flags via update
+            kwargs: dict[str, Any] = {}
+            if "source" in flags:
+                kwargs["source_id"] = int(flags["source"])
+            if "curve" in flags:
+                kwargs["curve_id"] = int(flags["curve"])
+            if "schedule" in flags:
+                kwargs["schedule_id"] = int(flags["schedule"])
+            if "mode" in flags:
+                kwargs["mode"] = _resolve_enum(flags["mode"], FAN_MODE_VALUES)
+            if "inverted" in flags:
+                kwargs["inverted"] = _parse_bool(flags["inverted"])
+            if "group" in flags:
+                kwargs["group_id"] = int(flags["group"])
+            if "enabled" in flags:
+                kwargs["enabled"] = _parse_bool(flags["enabled"])
+            if kwargs:
+                f = client.fans_update(f.id, **kwargs)
             console.print(f"[green]Created fan {f.id}:[/green] {f.name} (PWM GPIO {f.pwm_gpio})")
 
         elif action == "update":
@@ -1558,7 +1580,7 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
             "fans": (
                 "fans list                              — List all fans\n"
                 "  fans get <id>                        — Show fan detail\n"
-                "  fans create --pwm <gpio> --name <n>  — Create fan\n"
+                "  fans create --pwm <gpio> --name <n> [--source N] [--curve N] [--mode auto|manual] ...  — Create fan\n"
                 "  fans update <id> [--duty N] [--mode auto|manual] ...  — Update fan\n"
                 "  fans enable <id>                     — Enable a fan\n"
                 "  fans disable <id>                    — Disable a fan\n"
