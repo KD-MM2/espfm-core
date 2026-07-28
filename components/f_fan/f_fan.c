@@ -301,8 +301,10 @@ esp_err_t f_fan_update_rpm(f_fan_handle_t handle, uint8_t id)
 
     if (handle->channels[id].duty == 0) {
         handle->channels[id].rpm = 0;
-        int discard;
-        f_pcnt_read_and_clear(handle->pcnt, handle->pcnt_unit_id[id], &discard);
+        if (handle->pcnt_unit_id[id] != 0xFF && handle->pcnt != NULL) {
+            int discard;
+            f_pcnt_read_and_clear(handle->pcnt, handle->pcnt_unit_id[id], &discard);
+        }
         goto cleanup;
     }
 
