@@ -236,6 +236,11 @@ esp_err_t f_fan_set_enabled(f_fan_handle_t handle, uint8_t id, bool enabled)
     }
     handle->channels[id].enabled = enabled;
 
+    if (!enabled) {
+        uint8_t effective = handle->channels[id].inverted ? 100 : 0;
+        f_ledc_set_duty(handle->ledc, handle->ledc_channel_id[id], (float)effective);
+    }
+
 cleanup:
     xSemaphoreGiveRecursive(handle->mutex);
     return ret;
@@ -291,6 +296,13 @@ esp_err_t f_fan_update_rpm(f_fan_handle_t handle, uint8_t id)
 
     if (!handle->slot_used[id]) {
         ret = ESP_ERR_NOT_FOUND;
+        goto cleanup;
+    }
+
+    if (handle->channels[id].duty == 0) {
+        handle->channels[id].rpm = 0;
+        int discard;
+        f_pcnt_read_and_clear(handle->pcnt, handle->pcnt_unit_id[id], &discard);
         goto cleanup;
     }
 
