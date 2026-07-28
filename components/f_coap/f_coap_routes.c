@@ -196,6 +196,67 @@ static void handle_fan_delete(coap_resource_t *resource, coap_session_t *session
 }
 
 /* ------------------------------------------------------------------ */
+/*  DS18B20 handlers: /ds18b20/scan                                    */
+/* ------------------------------------------------------------------ */
+
+/* Context for the Ds18b20ScanResponse devices callback encoding */
+typedef struct {
+    const Ds18b20Device *devs;
+    uint8_t count;
+} ds18b20_cb_ctx_t;
+
+static bool ds18b20_encode_cb(pb_ostream_t *stream, const pb_field_t *field, void *const *arg)
+{
+    const ds18b20_cb_ctx_t *ctx = (const ds18b20_cb_ctx_t *)(*arg);
+    for (uint8_t i = 0; i < ctx->count; i++) {
+        if (!pb_encode_tag_for_field(stream, field)) return false;
+        if (!pb_encode_submessage(stream, Ds18b20Device_fields, &ctx->devs[i])) return false;
+    }
+    return true;
+}
+
+static void handle_ds18b20_scan(coap_resource_t *resource, coap_session_t *session,
+                                const coap_pdu_t *req, const coap_string_t *query,
+                                coap_pdu_t *resp)
+{
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
+    if (h->ds18b20 == NULL) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE);
+        return;
+    }
+
+    uint8_t count = 0;
+    if (f_ds18b20_scan(h->ds18b20, &count) != ESP_OK) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_INTERNAL_ERROR);
+        return;
+    }
+
+    /* Trigger batch conversion for all discovered sensors */
+    f_ds18b20_trigger_all(h->ds18b20);
+
+    static Ds18b20Device devices[F_DS18B20_MAX_DEVICES];
+    for (uint8_t i = 0; i < count; i++) {
+        devices[i] = (Ds18b20Device)Ds18b20Device_init_default;
+        devices[i].index = i;
+        f_ds18b20_get_rom_code(h->ds18b20, i, &devices[i].rom_code);
+        float temp;
+        if (f_ds18b20_read_temp(h->ds18b20, i, &temp) == ESP_OK) {
+            devices[i].temp_c = temp;
+        }
+    }
+
+    ds18b20_cb_ctx_t cb_ctx = {.devs = devices, .count = count};
+
+    static Ds18b20ScanResponse sr;
+    sr                = (Ds18b20ScanResponse)Ds18b20ScanResponse_init_default;
+    sr.devices.funcs.encode = ds18b20_encode_cb;
+    sr.devices.arg    = &cb_ctx;
+    sr.device_count   = count;
+
+    encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &sr, &Ds18b20ScanResponse_msg);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Source handlers: /sources, /sources/{id}, /sources/temp             */
 /* ------------------------------------------------------------------ */
 
@@ -265,10 +326,18 @@ static void handle_source_post(coap_resource_t *resource, coap_session_t *sessio
             return;
         }
         uint8_t nid;
-        if (f_source_add(h->source, pb_to_source_type(cr.type), (uint8_t)cr.gpio, cr.name, &nid) !=
-            ESP_OK) {
-            coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
-            return;
+        source_type_t stype = pb_to_source_type(cr.type);
+
+        if (stype == SOURCE_TYPE_DS18B20) {
+            if (f_source_add_ds18b20(h->source, cr.ds18b20_rom_code, cr.name, &nid) != ESP_OK) {
+                coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
+                return;
+            }
+        } else {
+            if (f_source_add(h->source, stype, (uint8_t)cr.gpio, cr.name, &nid) != ESP_OK) {
+                coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
+                return;
+            }
         }
         save_config(h);
         f_source_info_t si;
@@ -820,6 +889,9 @@ void f_coap_register_resources(coap_context_t *ctx, struct f_coap *h)
     add_resource(ctx, h, "system/hostname", NULL, NULL, handle_system_put, NULL);
     /* /system/reboot */
     add_resource(ctx, h, "system/reboot", NULL, handle_system_post, NULL, NULL);
+
+    /* /ds18b20/scan */
+    add_resource(ctx, h, "ds18b20/scan", handle_ds18b20_scan, NULL, NULL, NULL);
 
     /* /wifi/scan */
     add_resource(ctx, h, "wifi/scan", handle_wifi_get, NULL, NULL, NULL);

@@ -115,7 +115,8 @@ static void on_ap_stop(void *arg, esp_event_base_t base, int32_t id, void *data)
 
 esp_err_t f_coap_init(f_coap_handle_t *handle, f_fan_handle_t fan, f_source_handle_t source,
                       f_curve_handle_t curve, f_schedule_handle_t schedule,
-                      f_config_handle_t config, f_mdns_handle_t mdns)
+                      f_config_handle_t config, f_mdns_handle_t mdns,
+                      f_ds18b20_handle_t ds18b20)
 {
     if (!handle) return ESP_ERR_INVALID_ARG;
     struct f_coap *h = calloc(1, sizeof(*h));
@@ -126,6 +127,7 @@ esp_err_t f_coap_init(f_coap_handle_t *handle, f_fan_handle_t fan, f_source_hand
     h->schedule = schedule;
     h->config   = config;
     h->mdns     = mdns;
+    h->ds18b20  = ds18b20;
 
     coap_startup();
 

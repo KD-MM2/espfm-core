@@ -7,6 +7,7 @@
 #include "f_schedule.h"
 #include "f_config.h"
 #include "f_mdns.h"
+#include "f_ds18b20.h"
 #include <coap3/coap.h>
 #include "pb.h"
 #include "espfm.pb.h"
@@ -36,6 +37,7 @@ struct f_coap {
     f_schedule_handle_t schedule;
     f_config_handle_t config;
     f_mdns_handle_t mdns;
+    f_ds18b20_handle_t ds18b20;
 };
 
 void f_coap_register_resources(coap_context_t *ctx, struct f_coap *h);
