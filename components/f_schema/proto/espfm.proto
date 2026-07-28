@@ -54,6 +54,7 @@ message SourceInfo {
     SourceStatus status  = 4;
     float temp_c         = 5;
     uint32 gpio          = 6;  // 255=none
+    uint64 ds18b20_rom_code = 7;
 }
 
 message CurvePoint {
@@ -132,11 +133,23 @@ message SourceCreateRequest {
     SourceType type = 1;
     string name     = 2;
     uint32 gpio     = 3;  // optional, 255=none
+    uint64 ds18b20_rom_code = 4;
 }
 
 message ManualTempRequest {
     uint32 id   = 1;
     float temp_c = 2;
+}
+
+message Ds18b20Device {
+    uint32 index    = 1;
+    uint64 rom_code = 2;
+    float temp_c    = 3;
+}
+
+message Ds18b20ScanResponse {
+    repeated Ds18b20Device devices = 1;
+    uint32 device_count = 2;
 }
 
 // ===== Curve CRUD =====

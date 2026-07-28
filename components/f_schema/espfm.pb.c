@@ -51,6 +51,12 @@ PB_BIND(SourceCreateRequest, SourceCreateRequest, AUTO)
 PB_BIND(ManualTempRequest, ManualTempRequest, AUTO)
 
 
+PB_BIND(Ds18b20Device, Ds18b20Device, AUTO)
+
+
+PB_BIND(Ds18b20ScanResponse, Ds18b20ScanResponse, AUTO)
+
+
 PB_BIND(CurveList, CurveList, 2)
 
 

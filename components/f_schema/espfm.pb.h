@@ -58,6 +58,7 @@ typedef struct _SourceInfo {
     SourceStatus status;
     float temp_c;
     uint32_t gpio; /* 255=none */
+    uint64_t ds18b20_rom_code;
 } SourceInfo;
 
 typedef struct _CurvePoint {
@@ -149,12 +150,24 @@ typedef struct _SourceCreateRequest {
     SourceType type;
     char name[16];
     uint32_t gpio; /* optional, 255=none */
+    uint64_t ds18b20_rom_code;
 } SourceCreateRequest;
 
 typedef struct _ManualTempRequest {
     uint32_t id;
     float temp_c;
 } ManualTempRequest;
+
+typedef struct _Ds18b20Device {
+    uint32_t index;
+    uint64_t rom_code;
+    float temp_c;
+} Ds18b20Device;
+
+typedef struct _Ds18b20ScanResponse {
+    pb_callback_t devices;
+    uint32_t device_count;
+} Ds18b20ScanResponse;
 
 typedef struct _CurveList {
     pb_size_t curves_count;
@@ -293,9 +306,11 @@ extern "C" {
 
 
 
+
+
 /* Initializer values for message structs */
 #define FanInfo_init_default                     {0, "", _FanMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _FanAlarm_MIN}
-#define SourceInfo_init_default                  {0, "", _SourceType_MIN, _SourceStatus_MIN, 0, 0}
+#define SourceInfo_init_default                  {0, "", _SourceType_MIN, _SourceStatus_MIN, 0, 0, 0}
 #define CurvePoint_init_default                  {0, 0}
 #define CurveInfo_init_default                   {0, "", 0, {CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default}}
 #define ScheduleInfo_init_default                {0, 0, 0, 0, 0, 0}
@@ -307,8 +322,10 @@ extern "C" {
 #define FanUpdateRequest_init_default            {0, false, _FanMode_MIN, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define FanId_init_default                       {0}
 #define SourceList_init_default                  {0, {SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default}}
-#define SourceCreateRequest_init_default         {_SourceType_MIN, "", 0}
+#define SourceCreateRequest_init_default         {_SourceType_MIN, "", 0, 0}
 #define ManualTempRequest_init_default           {0, 0}
+#define Ds18b20Device_init_default               {0, 0, 0}
+#define Ds18b20ScanResponse_init_default         {{{NULL}, NULL}, 0}
 #define CurveList_init_default                   {0, {CurveInfo_init_default, CurveInfo_init_default, CurveInfo_init_default, CurveInfo_init_default, CurveInfo_init_default, CurveInfo_init_default, CurveInfo_init_default, CurveInfo_init_default, CurveInfo_init_default, CurveInfo_init_default, CurveInfo_init_default, CurveInfo_init_default, CurveInfo_init_default, CurveInfo_init_default, CurveInfo_init_default, CurveInfo_init_default}}
 #define CurveCreateRequest_init_default          {"", 0, {CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default}}
 #define CurveUpdateRequest_init_default          {0, "", 0, {CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default}}
@@ -322,7 +339,7 @@ extern "C" {
 #define Empty_init_default                       {0}
 #define StatusResponse_init_default              {0, 0, ""}
 #define FanInfo_init_zero                        {0, "", _FanMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _FanAlarm_MIN}
-#define SourceInfo_init_zero                     {0, "", _SourceType_MIN, _SourceStatus_MIN, 0, 0}
+#define SourceInfo_init_zero                     {0, "", _SourceType_MIN, _SourceStatus_MIN, 0, 0, 0}
 #define CurvePoint_init_zero                     {0, 0}
 #define CurveInfo_init_zero                      {0, "", 0, {CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero}}
 #define ScheduleInfo_init_zero                   {0, 0, 0, 0, 0, 0}
@@ -334,8 +351,10 @@ extern "C" {
 #define FanUpdateRequest_init_zero               {0, false, _FanMode_MIN, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define FanId_init_zero                          {0}
 #define SourceList_init_zero                     {0, {SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero}}
-#define SourceCreateRequest_init_zero            {_SourceType_MIN, "", 0}
+#define SourceCreateRequest_init_zero            {_SourceType_MIN, "", 0, 0}
 #define ManualTempRequest_init_zero              {0, 0}
+#define Ds18b20Device_init_zero                  {0, 0, 0}
+#define Ds18b20ScanResponse_init_zero            {{{NULL}, NULL}, 0}
 #define CurveList_init_zero                      {0, {CurveInfo_init_zero, CurveInfo_init_zero, CurveInfo_init_zero, CurveInfo_init_zero, CurveInfo_init_zero, CurveInfo_init_zero, CurveInfo_init_zero, CurveInfo_init_zero, CurveInfo_init_zero, CurveInfo_init_zero, CurveInfo_init_zero, CurveInfo_init_zero, CurveInfo_init_zero, CurveInfo_init_zero, CurveInfo_init_zero, CurveInfo_init_zero}}
 #define CurveCreateRequest_init_zero             {"", 0, {CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero}}
 #define CurveUpdateRequest_init_zero             {0, "", 0, {CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero}}
@@ -370,6 +389,7 @@ extern "C" {
 #define SourceInfo_status_tag                    4
 #define SourceInfo_temp_c_tag                    5
 #define SourceInfo_gpio_tag                      6
+#define SourceInfo_ds18b20_rom_code_tag          7
 #define CurvePoint_temp_c_tag                    1
 #define CurvePoint_duty_tag                      2
 #define CurveInfo_id_tag                         1
@@ -414,8 +434,14 @@ extern "C" {
 #define SourceCreateRequest_type_tag             1
 #define SourceCreateRequest_name_tag             2
 #define SourceCreateRequest_gpio_tag             3
+#define SourceCreateRequest_ds18b20_rom_code_tag 4
 #define ManualTempRequest_id_tag                 1
 #define ManualTempRequest_temp_c_tag             2
+#define Ds18b20Device_index_tag                  1
+#define Ds18b20Device_rom_code_tag               2
+#define Ds18b20Device_temp_c_tag                 3
+#define Ds18b20ScanResponse_devices_tag          1
+#define Ds18b20ScanResponse_device_count_tag     2
 #define CurveList_curves_tag                     1
 #define CurveCreateRequest_name_tag              1
 #define CurveCreateRequest_points_tag            2
@@ -472,7 +498,8 @@ X(a, STATIC,   SINGULAR, STRING,   name,              2) \
 X(a, STATIC,   SINGULAR, UENUM,    type,              3) \
 X(a, STATIC,   SINGULAR, UENUM,    status,            4) \
 X(a, STATIC,   SINGULAR, FLOAT,    temp_c,            5) \
-X(a, STATIC,   SINGULAR, UINT32,   gpio,              6)
+X(a, STATIC,   SINGULAR, UINT32,   gpio,              6) \
+X(a, STATIC,   SINGULAR, UINT64,   ds18b20_rom_code,   7)
 #define SourceInfo_CALLBACK NULL
 #define SourceInfo_DEFAULT NULL
 
@@ -567,7 +594,8 @@ X(a, STATIC,   REPEATED, MESSAGE,  sources,           1)
 #define SourceCreateRequest_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    type,              1) \
 X(a, STATIC,   SINGULAR, STRING,   name,              2) \
-X(a, STATIC,   SINGULAR, UINT32,   gpio,              3)
+X(a, STATIC,   SINGULAR, UINT32,   gpio,              3) \
+X(a, STATIC,   SINGULAR, UINT64,   ds18b20_rom_code,   4)
 #define SourceCreateRequest_CALLBACK NULL
 #define SourceCreateRequest_DEFAULT NULL
 
@@ -576,6 +604,20 @@ X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
 X(a, STATIC,   SINGULAR, FLOAT,    temp_c,            2)
 #define ManualTempRequest_CALLBACK NULL
 #define ManualTempRequest_DEFAULT NULL
+
+#define Ds18b20Device_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   index,             1) \
+X(a, STATIC,   SINGULAR, UINT64,   rom_code,          2) \
+X(a, STATIC,   SINGULAR, FLOAT,    temp_c,            3)
+#define Ds18b20Device_CALLBACK NULL
+#define Ds18b20Device_DEFAULT NULL
+
+#define Ds18b20ScanResponse_FIELDLIST(X, a) \
+X(a, CALLBACK, REPEATED, MESSAGE,  devices,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   device_count,      2)
+#define Ds18b20ScanResponse_CALLBACK pb_default_field_callback
+#define Ds18b20ScanResponse_DEFAULT NULL
+#define Ds18b20ScanResponse_devices_MSGTYPE Ds18b20Device
 
 #define CurveList_FIELDLIST(X, a) \
 X(a, STATIC,   REPEATED, MESSAGE,  curves,            1)
@@ -680,6 +722,8 @@ extern const pb_msgdesc_t FanId_msg;
 extern const pb_msgdesc_t SourceList_msg;
 extern const pb_msgdesc_t SourceCreateRequest_msg;
 extern const pb_msgdesc_t ManualTempRequest_msg;
+extern const pb_msgdesc_t Ds18b20Device_msg;
+extern const pb_msgdesc_t Ds18b20ScanResponse_msg;
 extern const pb_msgdesc_t CurveList_msg;
 extern const pb_msgdesc_t CurveCreateRequest_msg;
 extern const pb_msgdesc_t CurveUpdateRequest_msg;
@@ -709,6 +753,8 @@ extern const pb_msgdesc_t StatusResponse_msg;
 #define SourceList_fields &SourceList_msg
 #define SourceCreateRequest_fields &SourceCreateRequest_msg
 #define ManualTempRequest_fields &ManualTempRequest_msg
+#define Ds18b20Device_fields &Ds18b20Device_msg
+#define Ds18b20ScanResponse_fields &Ds18b20ScanResponse_msg
 #define CurveList_fields &CurveList_msg
 #define CurveCreateRequest_fields &CurveCreateRequest_msg
 #define CurveUpdateRequest_fields &CurveUpdateRequest_msg
@@ -723,12 +769,14 @@ extern const pb_msgdesc_t StatusResponse_msg;
 #define StatusResponse_fields &StatusResponse_msg
 
 /* Maximum encoded size of messages (where known) */
-#define ConfigFile_size                          3757
+/* Ds18b20ScanResponse_size depends on runtime parameters */
+#define ConfigFile_size                          3845
 #define CurveCreateRequest_size                  147
 #define CurveInfo_size                           153
 #define CurveList_size                           2496
 #define CurvePoint_size                          11
 #define CurveUpdateRequest_size                  153
+#define Ds18b20Device_size                       22
 #define ESPFM_PB_H_MAX_SIZE                      ConfigFile_size
 #define Empty_size                               0
 #define FanCreateRequest_size                    29
@@ -742,9 +790,9 @@ extern const pb_msgdesc_t StatusResponse_msg;
 #define ScheduleInfo_size                        32
 #define ScheduleList_size                        272
 #define ScheduleUpdateRequest_size               32
-#define SourceCreateRequest_size                 25
-#define SourceInfo_size                          38
-#define SourceList_size                          320
+#define SourceCreateRequest_size                 36
+#define SourceInfo_size                          49
+#define SourceList_size                          408
 #define StatusResponse_size                      73
 #define SystemInfo_size                          114
 #define WifiApRecord_size                        57
