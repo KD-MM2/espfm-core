@@ -9,6 +9,7 @@
 #include "pb_decode.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 static const char *TAG = "f_config";
 
@@ -306,5 +307,35 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan, f_sour
 
     ESP_LOGI(TAG, "Config loaded (%zu fans, %zu sources, %zu curves, %zu schedules)", fan_count,
              src_count, cur_count, sched_count);
+    return ESP_OK;
+}
+
+/* ------------------------------------------------------------------ */
+/*  DS18B20 GPIO persistence (simple text file)                       */
+/* ------------------------------------------------------------------ */
+
+esp_err_t f_config_save_ds18b20_gpio(f_config_handle_t handle, uint8_t gpio)
+{
+    if (handle == NULL || !handle->mounted) return ESP_ERR_INVALID_STATE;
+    FILE *f = fopen("/littlefs/ds18b20_gpio", "w");
+    if (f == NULL) return ESP_FAIL;
+    fprintf(f, "%d", gpio);
+    fclose(f);
+    ESP_LOGI(TAG, "DS18B20 GPIO saved: %d", gpio);
+    return ESP_OK;
+}
+
+esp_err_t f_config_load_ds18b20_gpio(f_config_handle_t handle, uint8_t *gpio_out)
+{
+    if (handle == NULL || !handle->mounted || gpio_out == NULL) return ESP_ERR_INVALID_STATE;
+    FILE *f = fopen("/littlefs/ds18b20_gpio", "r");
+    if (f == NULL) return ESP_ERR_NOT_FOUND;
+    int gpio;
+    if (fscanf(f, "%d", &gpio) != 1) {
+        fclose(f);
+        return ESP_ERR_INVALID_ARG;
+    }
+    fclose(f);
+    *gpio_out = (uint8_t)gpio;
     return ESP_OK;
 }

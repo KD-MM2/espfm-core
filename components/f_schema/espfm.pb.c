@@ -57,6 +57,9 @@ PB_BIND(Ds18b20Device, Ds18b20Device, AUTO)
 PB_BIND(Ds18b20ScanResponse, Ds18b20ScanResponse, AUTO)
 
 
+PB_BIND(Ds18b20ConfigRequest, Ds18b20ConfigRequest, AUTO)
+
+
 PB_BIND(CurveList, CurveList, 2)
 
 

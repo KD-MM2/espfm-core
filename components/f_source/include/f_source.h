@@ -25,7 +25,8 @@ typedef struct {
 
 typedef struct f_source *f_source_handle_t;
 
-esp_err_t f_source_init(f_source_handle_t *handle, f_adc_handle_t adc, f_ds18b20_handle_t ds18b20);
+esp_err_t f_source_init(f_source_handle_t *handle, f_adc_handle_t adc,
+                        f_ds18b20_handle_t *ds18b20_ref);
 esp_err_t f_source_add(f_source_handle_t handle, source_type_t type, uint8_t gpio, const char *name,
                        uint8_t *id_out);
 esp_err_t f_source_remove(f_source_handle_t handle, uint8_t id);

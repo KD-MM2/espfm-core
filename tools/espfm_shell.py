@@ -414,6 +414,13 @@ class ESPFMClient:
         _, data = self._post("/system/reboot")
         return self._decode(pb.StatusResponse, data)
 
+    # -- DS18B20 -----------------------------------------------------------
+
+    def ds18b20_config(self, gpio: int) -> pb.StatusResponse:
+        req = pb.Ds18b20ConfigRequest(gpio=gpio)
+        _, data = self._post("/ds18b20/config", req)
+        return self._decode(pb.StatusResponse, data)
+
 
 # ============================================================
 # Utility helpers
@@ -1019,9 +1026,9 @@ def _handle_system(shell: ESPFMShell, args: list[str]) -> None:
 
 
 def _handle_ds18b20(shell: ESPFMShell, args: list[str]) -> None:
-    """DS18B20 sensor operations: ds18b20 scan."""
+    """DS18B20 sensor operations: ds18b20 scan | config."""
     if not args:
-        console.print("[yellow]Usage: ds18b20 scan[/yellow]")
+        console.print("[yellow]Usage: ds18b20 <scan|config> ...[/yellow]")
         return
     action = args[0]
     if not _check_connected(shell):
@@ -1047,6 +1054,19 @@ def _handle_ds18b20(shell: ESPFMShell, args: list[str]) -> None:
                 table.add_row(str(dev.index), rom_formatted, f"{dev.temp_c:.1f} C")
 
             console.print(table)
+
+        elif action == "config":
+            flags = _parse_flags(args[1:])
+            if "gpio" not in flags:
+                console.print("[yellow]Usage: ds18b20 config --gpio <pin>[/yellow]")
+                return
+            gpio = int(flags["gpio"])
+            result = client.ds18b20_config(gpio)
+            if result.ok:
+                console.print(f"[green]DS18B20 bus configured on GPIO {gpio}.[/green]")
+            else:
+                console.print(f"[red]Failed to configure DS18B20: {result.error_msg}[/red]")
+
         else:
             console.print(f"[yellow]Unknown ds18b20 action: {action}[/yellow]")
 
@@ -1661,7 +1681,8 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
                 "  system reboot  — Reboot the device (2s delay)"
             ),
             "ds18b20": (
-                "ds18b20 scan  — Scan for DS18B20 devices on the 1-Wire bus"
+                "ds18b20 scan            — Scan for DS18B20 devices on the 1-Wire bus\n"
+                "  ds18b20 config --gpio <pin>  — Configure DS18B20 bus GPIO at runtime"
             ),
             "devices": (
                 "devices scan [--timeout N]            — Scan LAN for ESPFM devices (mDNS)\n"
@@ -1693,7 +1714,7 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
   schedules  list | create | update | delete
   wifi       scan | status | connect
   system     info | reboot
-  ds18b20    scan
+  ds18b20    scan | config
   devices    scan | connect | update
 
 [bold cyan]Data Operations[/bold cyan]
@@ -1763,14 +1784,14 @@ class ESPFMShell:
                 "fans", "sources", "curves", "schedules", "wifi", "system", "devices", "ds18b20",
                 "dashboard", "export", "import",
                 "list", "get", "create", "update", "delete", "enable", "disable", "temp",
-                "scan", "status", "info", "reboot",
+                "scan", "status", "info", "reboot", "config",
                 "--pwm", "--tach", "--name", "--type", "--gpio", "--temp",
                 "--duty", "--mode", "--source", "--curve", "--schedule",
                 "--group", "--inverted", "--enabled",
                 "--points", "--fan", "--start", "--end",
                 "--rom", "--ssid", "--pass", "--port", "--timeout", "--no-delete",
                 "--hostname",
-                "auto", "manual", "ntc", "ds18b20", "true", "false",
+                "auto", "manual", "ntc", "true", "false",
             ],
             ignore_case=True,
         )

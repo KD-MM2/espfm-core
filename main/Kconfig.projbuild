@@ -20,10 +20,4 @@ menu "ESPFanManager Configuration"
         int "Control loop period (ms)"
         default 1000
         range 100 10000
-    config ESPFM_DS18B20_GPIO
-        int "DS18B20 1-Wire GPIO pin (-1 to disable)"
-        default -1
-        range -1 48
-        help
-            GPIO pin for DS18B20 1-Wire bus. Set to -1 to disable DS18B20 support.
 endmenu

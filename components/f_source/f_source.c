@@ -21,21 +21,22 @@ static const char *TAG = "f_source";
 
 struct f_source {
     f_adc_handle_t adc;
-    f_ds18b20_handle_t ds18b20;
+    f_ds18b20_handle_t *ds18b20_ref;
     f_source_info_t sources[F_SOURCE_MAX_COUNT];
     bool slot_used[F_SOURCE_MAX_COUNT];
     uint8_t count;
     SemaphoreHandle_t mutex;
 };
 
-esp_err_t f_source_init(f_source_handle_t *handle, f_adc_handle_t adc, f_ds18b20_handle_t ds18b20)
+esp_err_t f_source_init(f_source_handle_t *handle, f_adc_handle_t adc,
+                        f_ds18b20_handle_t *ds18b20_ref)
 {
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
     f_source_handle_t h = calloc(1, sizeof(struct f_source));
     if (h == NULL) return ESP_ERR_NO_MEM;
-    h->adc     = adc;
-    h->ds18b20 = ds18b20;
-    h->mutex   = xSemaphoreCreateRecursiveMutex();
+    h->adc         = adc;
+    h->ds18b20_ref = ds18b20_ref;
+    h->mutex       = xSemaphoreCreateRecursiveMutex();
     if (h->mutex == NULL) {
         free(h);
         return ESP_ERR_NO_MEM;
@@ -135,8 +136,9 @@ cleanup:
 
 esp_err_t f_source_trigger_ds18b20(f_source_handle_t handle)
 {
-    if (handle == NULL || handle->ds18b20 == NULL) return ESP_ERR_INVALID_STATE;
-    return f_ds18b20_trigger_all(handle->ds18b20);
+    if (handle == NULL || handle->ds18b20_ref == NULL || *handle->ds18b20_ref == NULL)
+        return ESP_ERR_INVALID_STATE;
+    return f_ds18b20_trigger_all(*handle->ds18b20_ref);
 }
 
 esp_err_t f_source_remove(f_source_handle_t handle, uint8_t id)
@@ -190,12 +192,12 @@ esp_err_t f_source_get_reading(f_source_handle_t handle, uint8_t id, float *temp
         f_adc_ntc_temp(voltage, NTC_VCC, NTC_R_DIV, NTC_BETA, NTC_R0, NTC_T0_K, &s->temp_c);
         s->last_update_us = esp_timer_get_time();
         s->status         = SOURCE_STATUS_VALID;
-    } else if (s->type == SOURCE_TYPE_DS18B20 && handle->ds18b20) {
+    } else if (s->type == SOURCE_TYPE_DS18B20 && handle->ds18b20_ref && *handle->ds18b20_ref) {
         uint8_t idx;
-        if (f_ds18b20_find_by_rom(handle->ds18b20, s->ds18b20_rom_code, &idx) != ESP_OK) {
+        if (f_ds18b20_find_by_rom(*handle->ds18b20_ref, s->ds18b20_rom_code, &idx) != ESP_OK) {
             s->status = SOURCE_STATUS_INVALID;
         } else {
-            esp_err_t err = f_ds18b20_read_temp(handle->ds18b20, idx, &s->temp_c);
+            esp_err_t err = f_ds18b20_read_temp(*handle->ds18b20_ref, idx, &s->temp_c);
             if (err != ESP_OK) {
                 s->status = SOURCE_STATUS_INVALID;
             } else {

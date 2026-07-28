@@ -55,9 +55,7 @@ void app_main(void)
     ESP_ERROR_CHECK(f_adc_init(&adc));
 
     f_ds18b20_handle_t ds18b20 = NULL;
-#if CONFIG_ESPFM_DS18B20_GPIO >= 0
-    ESP_ERROR_CHECK(f_ds18b20_init(&ds18b20, (uint8_t)CONFIG_ESPFM_DS18B20_GPIO));
-#endif
+    /* DS18B20 GPIO is now runtime-configurable via CoAP; loaded from config below */
 
     f_ledc_handle_t ledc;
     ESP_ERROR_CHECK(f_ledc_init(&ledc, 25000, 11));
@@ -70,7 +68,7 @@ void app_main(void)
     ESP_ERROR_CHECK(f_fan_init(&fan, ledc, pcnt));
 
     f_source_handle_t source;
-    ESP_ERROR_CHECK(f_source_init(&source, adc, ds18b20));
+    ESP_ERROR_CHECK(f_source_init(&source, adc, &ds18b20));
 
     f_curve_handle_t curve;
     ESP_ERROR_CHECK(f_curve_init(&curve));
@@ -83,6 +81,15 @@ void app_main(void)
     ESP_ERROR_CHECK(f_config_init(&config, "storage", "/littlefs"));
     ESP_ERROR_CHECK(f_config_load_all(config, fan, source, curve, schedule));
 
+    /* --- DS18B20 auto-init from persisted config --- */
+    {
+        uint8_t ds_gpio;
+        if (f_config_load_ds18b20_gpio(config, &ds_gpio) == ESP_OK) {
+            ESP_LOGI(TAG, "DS18B20: initializing on GPIO %d (from config)", ds_gpio);
+            f_ds18b20_init(&ds18b20, ds_gpio);
+        }
+    }
+
     /* --- WiFi APSTA (AP starts immediately) --- */
     f_wifi_handle_t wifi;
     ESP_ERROR_CHECK(f_wifi_init(&wifi));
@@ -93,7 +100,7 @@ void app_main(void)
 
     /* --- CoAP Server (UDP :5683, Protobuf, WiFi-aware lifecycle) --- */
     f_coap_handle_t coap;
-    ESP_ERROR_CHECK(f_coap_init(&coap, fan, source, curve, schedule, config, mdns, ds18b20));
+    ESP_ERROR_CHECK(f_coap_init(&coap, fan, source, curve, schedule, config, mdns, &ds18b20));
 
     /* --- WiFi Provisioning (captive portal on STA failure) --- */
     f_provision_handle_t provision;

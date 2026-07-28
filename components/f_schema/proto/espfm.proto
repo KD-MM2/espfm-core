@@ -152,6 +152,10 @@ message Ds18b20ScanResponse {
     uint32 device_count = 2;
 }
 
+message Ds18b20ConfigRequest {
+    uint32 gpio = 1;
+}
+
 // ===== Curve CRUD =====
 
 message CurveList { repeated CurveInfo curves = 1; }

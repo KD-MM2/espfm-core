@@ -219,27 +219,28 @@ static void handle_ds18b20_scan(coap_resource_t *resource, coap_session_t *sessi
                                 const coap_pdu_t *req, const coap_string_t *query, coap_pdu_t *resp)
 {
     struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
-    if (h->ds18b20 == NULL) {
+    if (h->ds18b20_ref == NULL || *h->ds18b20_ref == NULL) {
         coap_pdu_set_code(resp, COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE);
         return;
     }
+    f_ds18b20_handle_t ds = *h->ds18b20_ref;
 
-    uint8_t count = 0;
-    if (f_ds18b20_scan(h->ds18b20, &count) != ESP_OK) {
+    uint8_t count         = 0;
+    if (f_ds18b20_scan(ds, &count) != ESP_OK) {
         coap_pdu_set_code(resp, COAP_RESPONSE_CODE_INTERNAL_ERROR);
         return;
     }
 
     /* Trigger batch conversion for all discovered sensors */
-    f_ds18b20_trigger_all(h->ds18b20);
+    f_ds18b20_trigger_all(ds);
 
     static Ds18b20Device devices[F_DS18B20_MAX_DEVICES];
     for (uint8_t i = 0; i < count; i++) {
         devices[i]       = (Ds18b20Device)Ds18b20Device_init_default;
         devices[i].index = i;
-        f_ds18b20_get_rom_code(h->ds18b20, i, &devices[i].rom_code);
+        f_ds18b20_get_rom_code(ds, i, &devices[i].rom_code);
         float temp;
-        if (f_ds18b20_read_temp(h->ds18b20, i, &temp) == ESP_OK) {
+        if (f_ds18b20_read_temp(ds, i, &temp) == ESP_OK) {
             devices[i].temp_c = temp;
         }
     }
@@ -253,6 +254,47 @@ static void handle_ds18b20_scan(coap_resource_t *resource, coap_session_t *sessi
     sr.device_count         = count;
 
     encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &sr, &Ds18b20ScanResponse_msg);
+}
+
+static void handle_ds18b20_config(coap_resource_t *resource, coap_session_t *session,
+                                  const coap_pdu_t *req, const coap_string_t *query,
+                                  coap_pdu_t *resp)
+{
+    struct f_coap *h        = (struct f_coap *)coap_resource_get_userdata(resource);
+    Ds18b20ConfigRequest cr = Ds18b20ConfigRequest_init_default;
+    if (!decode_request(req, &cr, &Ds18b20ConfigRequest_msg)) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
+        return;
+    }
+
+    uint8_t gpio = (uint8_t)cr.gpio;
+
+    /* Initialize or re-initialize the DS18B20 bus */
+    if (h->ds18b20_ref && *h->ds18b20_ref != NULL) {
+        /* Bus already initialized — return success with current device count */
+        uint8_t count = 0;
+        f_ds18b20_scan(*h->ds18b20_ref, &count);
+        static StatusResponse sr;
+        sr    = (StatusResponse)StatusResponse_init_default;
+        sr.ok = true;
+        encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &sr, &StatusResponse_msg);
+        return;
+    }
+
+    f_ds18b20_handle_t ds18b20 = NULL;
+    esp_err_t err              = f_ds18b20_init(&ds18b20, gpio);
+    if (err != ESP_OK) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
+        return;
+    }
+
+    if (h->ds18b20_ref) *h->ds18b20_ref = ds18b20;
+    if (h->config) f_config_save_ds18b20_gpio(h->config, gpio);
+
+    static StatusResponse sr;
+    sr    = (StatusResponse)StatusResponse_init_default;
+    sr.ok = true;
+    encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &sr, &StatusResponse_msg);
 }
 
 /* ------------------------------------------------------------------ */
@@ -891,6 +933,8 @@ void f_coap_register_resources(coap_context_t *ctx, struct f_coap *h)
 
     /* /ds18b20/scan */
     add_resource(ctx, h, "ds18b20/scan", handle_ds18b20_scan, NULL, NULL, NULL);
+    /* /ds18b20/config — runtime GPIO configuration */
+    add_resource(ctx, h, "ds18b20/config", NULL, handle_ds18b20_config, NULL, NULL);
 
     /* /wifi/scan */
     add_resource(ctx, h, "wifi/scan", handle_wifi_get, NULL, NULL, NULL);

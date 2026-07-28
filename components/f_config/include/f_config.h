@@ -18,6 +18,9 @@ esp_err_t f_config_save_all(f_config_handle_t handle, f_fan_handle_t fan, f_sour
 esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan, f_source_handle_t source,
                             f_curve_handle_t curve, f_schedule_handle_t schedule);
 
+esp_err_t f_config_save_ds18b20_gpio(f_config_handle_t handle, uint8_t gpio);
+esp_err_t f_config_load_ds18b20_gpio(f_config_handle_t handle, uint8_t *gpio_out);
+
 #ifdef __cplusplus
 }
 #endif
