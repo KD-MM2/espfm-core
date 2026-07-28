@@ -1055,6 +1055,14 @@ def _handle_ds18b20(shell: ESPFMShell, args: list[str]) -> None:
 
             console.print(table)
 
+            # Add ROM codes to completer for tab completion
+            if hasattr(shell, "_completer_words"):
+                for dev in resp.devices:
+                    rom_hex = f"{dev.rom_code:016X}"
+                    rom_formatted = ":".join(rom_hex[i:i+2] for i in range(0, 16, 2))
+                    if rom_formatted not in shell._completer_words:
+                        shell._completer_words.append(rom_formatted)
+
         elif action == "config":
             flags = _parse_flags(args[1:])
             if "gpio" not in flags:
@@ -1088,7 +1096,7 @@ def _handle_devices(shell: ESPFMShell, args: list[str]) -> None:
             return
         flags = _parse_flags(args[1:])
         timeout = float(flags.get("timeout", 3.0))
-        _devices_scan(timeout)
+        _devices_scan(shell, timeout)
 
     elif action == "connect":
         if len(args) < 2:
@@ -1113,7 +1121,7 @@ def _handle_devices(shell: ESPFMShell, args: list[str]) -> None:
         console.print(f"[yellow]Unknown devices action: {action}[/yellow]")
 
 
-def _devices_scan(timeout: float) -> None:
+def _devices_scan(shell: ESPFMShell, timeout: float) -> None:
     """Scan LAN for ESPFM devices via mDNS."""
     results: list[dict[str, Any]] = []
 
@@ -1166,6 +1174,13 @@ def _devices_scan(timeout: float) -> None:
             r["txt"].get("fw", "?"),
         )
     console.print(table)
+
+    # Add hostnames to completer for tab completion
+    if hasattr(shell, "_completer_words"):
+        for r in results:
+            hostname = r["hostname"]
+            if hostname not in shell._completer_words:
+                shell._completer_words.append(hostname)
 
 
 def _devices_connect(shell: ESPFMShell, suffix: str) -> None:
@@ -1783,23 +1798,21 @@ class ESPFMShell:
 
     def run(self) -> None:
         """Start the interactive REPL."""
-        completer = WordCompleter(
-            [
-                "connect", "disconnect", "help", "exit", "quit",
-                "fans", "sources", "curves", "schedules", "wifi", "system", "devices", "ds18b20",
-                "dashboard", "export", "import",
-                "list", "get", "create", "update", "delete", "enable", "disable", "temp",
-                "scan", "status", "info", "reboot", "config",
-                "--pwm", "--tach", "--name", "--type", "--gpio", "--temp",
-                "--duty", "--mode", "--source", "--curve", "--schedule",
-                "--group", "--inverted", "--enabled",
-                "--points", "--fan", "--start", "--end",
-                "--rom", "--ssid", "--pass", "--port", "--timeout", "--no-delete",
-                "--hostname",
-                "auto", "manual", "ntc", "true", "false",
-            ],
-            ignore_case=True,
-        )
+        self._completer_words: list[str] = [
+            "connect", "disconnect", "help", "exit", "quit",
+            "fans", "sources", "curves", "schedules", "wifi", "system", "devices", "ds18b20",
+            "dashboard", "export", "import",
+            "list", "get", "create", "update", "delete", "enable", "disable", "temp",
+            "scan", "status", "info", "reboot", "config",
+            "--pwm", "--tach", "--name", "--type", "--gpio", "--temp",
+            "--duty", "--mode", "--source", "--curve", "--schedule",
+            "--group", "--inverted", "--enabled",
+            "--points", "--fan", "--start", "--end",
+            "--rom", "--ssid", "--pass", "--port", "--timeout", "--no-delete",
+            "--hostname",
+            "auto", "manual", "ntc", "true", "false",
+        ]
+        completer = WordCompleter(self._completer_words, ignore_case=True)
         session: PromptSession[str] = PromptSession(
             history=InMemoryHistory(),
             completer=completer,
