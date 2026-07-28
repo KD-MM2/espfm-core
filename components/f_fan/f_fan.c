@@ -238,7 +238,13 @@ esp_err_t f_fan_set_enabled(f_fan_handle_t handle, uint8_t id, bool enabled)
 
     if (!enabled) {
         uint8_t effective = handle->channels[id].inverted ? 100 : 0;
-        f_ledc_set_duty(handle->ledc, handle->ledc_channel_id[id], (float)effective);
+        ESP_LOGI(TAG, "Disabling fan %d: inverted=%d, effective=%d%%, ledc_ch=%d", id,
+                 handle->channels[id].inverted, effective, handle->ledc_channel_id[id]);
+        esp_err_t ledc_err =
+            f_ledc_set_duty(handle->ledc, handle->ledc_channel_id[id], (float)effective);
+        if (ledc_err != ESP_OK) {
+            ESP_LOGE(TAG, "f_ledc_set_duty failed for fan %d: %s", id, esp_err_to_name(ledc_err));
+        }
     }
 
 cleanup:
