@@ -25,7 +25,6 @@ struct f_source {
     f_source_info_t sources[F_SOURCE_MAX_COUNT];
     bool slot_used[F_SOURCE_MAX_COUNT];
     uint8_t count;
-    uint8_t ds18b20_count;
     SemaphoreHandle_t mutex;
 };
 
@@ -36,15 +35,13 @@ esp_err_t f_source_init(f_source_handle_t *handle, f_adc_handle_t adc, f_ds18b20
     if (h == NULL) return ESP_ERR_NO_MEM;
     h->adc     = adc;
     h->ds18b20 = ds18b20;
-    if (h->ds18b20) f_ds18b20_scan(h->ds18b20, &h->ds18b20_count);
     h->mutex = xSemaphoreCreateRecursiveMutex();
     if (h->mutex == NULL) {
         free(h);
         return ESP_ERR_NO_MEM;
     }
     *handle = h;
-    ESP_LOGI(TAG, "Source registry initialized (max %d, DS18B20: %d)", F_SOURCE_MAX_COUNT,
-             h->ds18b20_count);
+    ESP_LOGI(TAG, "Source registry initialized (max %d)", F_SOURCE_MAX_COUNT);
     return ESP_OK;
 }
 
@@ -76,14 +73,8 @@ esp_err_t f_source_add(f_source_handle_t handle, source_type_t type, uint8_t gpi
     s->status                   = SOURCE_STATUS_INVALID;
     s->temp_c                   = 0.0f;
     s->gpio                     = gpio;
-    s->ds18b20_index            = 0;
+    s->ds18b20_rom_code         = 0;
     s->last_update_us           = 0;
-
-    if (type == SOURCE_TYPE_DS18B20) {
-        /* For DS18B20, gpio parameter carries the device index from scan */
-        s->ds18b20_index = gpio;
-        s->gpio          = F_SOURCE_GPIO_NONE;
-    }
 
     /* For manual-type sources, mark as valid immediately */
     if (type == SOURCE_TYPE_MANUAL) {
@@ -98,6 +89,54 @@ esp_err_t f_source_add(f_source_handle_t handle, source_type_t type, uint8_t gpi
 cleanup:
     xSemaphoreGiveRecursive(handle->mutex);
     return ret;
+}
+
+esp_err_t f_source_add_ds18b20(f_source_handle_t handle, uint64_t rom_code, const char *name,
+                                uint8_t *id_out)
+{
+    if (handle == NULL || name == NULL || id_out == NULL) return ESP_ERR_INVALID_ARG;
+
+    esp_err_t ret = ESP_OK;
+    xSemaphoreTakeRecursive(handle->mutex, portMAX_DELAY);
+
+    int slot = -1;
+    for (int i = 0; i < F_SOURCE_MAX_COUNT; i++) {
+        if (!handle->slot_used[i]) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0) {
+        ret = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+
+    f_source_info_t *s = &handle->sources[slot];
+    s->id              = (uint8_t)slot;
+    strncpy(s->name, name, ESPFM_NAME_MAX - 1);
+    s->name[ESPFM_NAME_MAX - 1] = '\0';
+    s->type                     = SOURCE_TYPE_DS18B20;
+    s->status                   = SOURCE_STATUS_INVALID;
+    s->temp_c                   = 0.0f;
+    s->gpio                     = F_SOURCE_GPIO_NONE;
+    s->ds18b20_rom_code         = rom_code;
+    s->last_update_us           = 0;
+
+    handle->slot_used[slot] = true;
+    handle->count++;
+    *id_out = (uint8_t)slot;
+    ESP_LOGI(TAG, "Source %d added: '%s' type=DS18B20 ROM=0x%016llX", slot, s->name,
+             (unsigned long long)rom_code);
+
+cleanup:
+    xSemaphoreGiveRecursive(handle->mutex);
+    return ret;
+}
+
+esp_err_t f_source_trigger_ds18b20(f_source_handle_t handle)
+{
+    if (handle == NULL || handle->ds18b20 == NULL) return ESP_ERR_INVALID_STATE;
+    return f_ds18b20_trigger_all(handle->ds18b20);
 }
 
 esp_err_t f_source_remove(f_source_handle_t handle, uint8_t id)
@@ -152,12 +191,17 @@ esp_err_t f_source_get_reading(f_source_handle_t handle, uint8_t id, float *temp
         s->last_update_us = esp_timer_get_time();
         s->status         = SOURCE_STATUS_VALID;
     } else if (s->type == SOURCE_TYPE_DS18B20 && handle->ds18b20) {
-        esp_err_t err = f_ds18b20_read_temp(handle->ds18b20, s->ds18b20_index, &s->temp_c);
-        if (err != ESP_OK) {
+        uint8_t idx;
+        if (f_ds18b20_find_by_rom(handle->ds18b20, s->ds18b20_rom_code, &idx) != ESP_OK) {
             s->status = SOURCE_STATUS_INVALID;
         } else {
-            s->last_update_us = esp_timer_get_time();
-            s->status         = SOURCE_STATUS_VALID;
+            esp_err_t err = f_ds18b20_read_temp(handle->ds18b20, idx, &s->temp_c);
+            if (err != ESP_OK) {
+                s->status = SOURCE_STATUS_INVALID;
+            } else {
+                s->last_update_us = esp_timer_get_time();
+                s->status         = SOURCE_STATUS_VALID;
+            }
         }
     }
 
