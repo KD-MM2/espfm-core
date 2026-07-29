@@ -92,3 +92,4 @@ _flash.ps1
 flash_output.txt
 idf-extra-components/
 esp-bsp/
+.superpowers/
