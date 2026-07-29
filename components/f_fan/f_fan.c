@@ -303,13 +303,12 @@ cleanup:
     return ret;
 }
 
-esp_err_t f_fan_set_gpio(f_fan_handle_t handle, uint8_t id,
-                         uint8_t new_pwm_gpio, uint8_t new_tach_gpio)
+esp_err_t f_fan_set_gpio(f_fan_handle_t handle, uint8_t id, uint8_t new_pwm_gpio,
+                         uint8_t new_tach_gpio)
 {
     if (handle == NULL || id >= F_FAN_MAX_COUNT) return ESP_ERR_INVALID_ARG;
     if (f_constraints_gpio((int)new_pwm_gpio, NULL) != ESP_OK) return ESP_ERR_INVALID_ARG;
-    if (new_tach_gpio != F_FAN_TACH_NONE &&
-        f_constraints_gpio((int)new_tach_gpio, NULL) != ESP_OK)
+    if (new_tach_gpio != F_FAN_TACH_NONE && f_constraints_gpio((int)new_tach_gpio, NULL) != ESP_OK)
         return ESP_ERR_INVALID_ARG;
 
     esp_err_t ret = ESP_OK;
@@ -342,8 +341,7 @@ esp_err_t f_fan_set_gpio(f_fan_handle_t handle, uint8_t id,
     handle->ledc_channel_id[id]    = ledc_ch;
     handle->pcnt_unit_id[id]       = pcnt_unit;
 
-    ESP_LOGI(TAG, "Fan %d GPIO updated: PWM_GPIO=%d TACH_GPIO=%d", id, new_pwm_gpio,
-             new_tach_gpio);
+    ESP_LOGI(TAG, "Fan %d GPIO updated: PWM_GPIO=%d TACH_GPIO=%d", id, new_pwm_gpio, new_tach_gpio);
 
 cleanup:
     xSemaphoreGiveRecursive(handle->mutex);

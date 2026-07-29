@@ -168,8 +168,8 @@ static void handle_fan_put(coap_resource_t *resource, coap_session_t *session,
     if (ur.has_enabled) f_fan_set_enabled(h->fan, (uint8_t)id, ur.enabled);
     /* GPIO in-place swap: tear down old LEDC/PCNT, allocate on new pins */
     if (ur.has_pwm_gpio || ur.has_tach_gpio) {
-        uint8_t new_pwm  = ur.has_pwm_gpio  ? (uint8_t)ur.pwm_gpio  : fi.pwm_gpio;
-        uint8_t new_tach = ur.has_tach_gpio  ? (uint8_t)ur.tach_gpio : fi.tach_gpio;
+        uint8_t new_pwm  = ur.has_pwm_gpio ? (uint8_t)ur.pwm_gpio : fi.pwm_gpio;
+        uint8_t new_tach = ur.has_tach_gpio ? (uint8_t)ur.tach_gpio : fi.tach_gpio;
         f_fan_set_gpio(h->fan, (uint8_t)id, new_pwm, new_tach);
     }
     save_config(h);
