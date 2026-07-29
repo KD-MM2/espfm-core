@@ -303,6 +303,53 @@ cleanup:
     return ret;
 }
 
+esp_err_t f_fan_set_gpio(f_fan_handle_t handle, uint8_t id,
+                         uint8_t new_pwm_gpio, uint8_t new_tach_gpio)
+{
+    if (handle == NULL || id >= F_FAN_MAX_COUNT) return ESP_ERR_INVALID_ARG;
+    if (f_constraints_gpio((int)new_pwm_gpio, NULL) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    if (new_tach_gpio != F_FAN_TACH_NONE &&
+        f_constraints_gpio((int)new_tach_gpio, NULL) != ESP_OK)
+        return ESP_ERR_INVALID_ARG;
+
+    esp_err_t ret = ESP_OK;
+    xSemaphoreTakeRecursive(handle->mutex, portMAX_DELAY);
+
+    if (!handle->slot_used[id]) {
+        ret = ESP_ERR_NOT_FOUND;
+        goto cleanup;
+    }
+
+    /* Remove old hardware resources */
+    f_ledc_remove_channel(handle->ledc, handle->ledc_channel_id[id]);
+    if (handle->pcnt_unit_id[id] != 0xFF && handle->pcnt != NULL) {
+        f_pcnt_remove_input(handle->pcnt, handle->pcnt_unit_id[id]);
+    }
+
+    /* Allocate new LEDC channel on new PWM GPIO */
+    uint8_t ledc_ch;
+    ESP_ERROR_CHECK(f_ledc_add_channel(handle->ledc, new_pwm_gpio, &ledc_ch));
+
+    /* Allocate new PCNT unit on new tach GPIO */
+    uint8_t pcnt_unit = 0xFF;
+    if (new_tach_gpio != F_FAN_TACH_NONE && handle->pcnt != NULL) {
+        ESP_ERROR_CHECK(f_pcnt_add_input(handle->pcnt, new_tach_gpio, &pcnt_unit));
+    }
+
+    /* Update struct fields */
+    handle->channels[id].pwm_gpio  = new_pwm_gpio;
+    handle->channels[id].tach_gpio = new_tach_gpio;
+    handle->ledc_channel_id[id]    = ledc_ch;
+    handle->pcnt_unit_id[id]       = pcnt_unit;
+
+    ESP_LOGI(TAG, "Fan %d GPIO updated: PWM_GPIO=%d TACH_GPIO=%d", id, new_pwm_gpio,
+             new_tach_gpio);
+
+cleanup:
+    xSemaphoreGiveRecursive(handle->mutex);
+    return ret;
+}
+
 esp_err_t f_fan_update_rpm(f_fan_handle_t handle, uint8_t id)
 {
     if (handle == NULL || id >= F_FAN_MAX_COUNT) return ESP_ERR_INVALID_ARG;
