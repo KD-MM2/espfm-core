@@ -121,6 +121,8 @@ message FanUpdateRequest {
     optional uint32 group_id    = 7;
     optional bool inverted      = 8;
     optional bool enabled       = 9;
+    optional uint32 pwm_gpio    = 10;  // NEW
+    optional uint32 tach_gpio   = 11;  // NEW (255=none)
 }
 
 message FanId { uint32 id = 1; }

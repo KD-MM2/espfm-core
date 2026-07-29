@@ -135,6 +135,10 @@ typedef struct _FanUpdateRequest {
     bool inverted;
     bool has_enabled;
     bool enabled;
+    bool has_pwm_gpio;
+    uint32_t pwm_gpio; /* NEW */
+    bool has_tach_gpio;
+    uint32_t tach_gpio; /* NEW (255=none) */
 } FanUpdateRequest;
 
 typedef struct _FanId {
@@ -330,7 +334,7 @@ extern "C" {
 #define WifiStatus_init_default                  {0, "", ""}
 #define FanList_init_default                     {0, {FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default}}
 #define FanCreateRequest_init_default            {0, 0, ""}
-#define FanUpdateRequest_init_default            {0, false, _FanMode_MIN, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define FanUpdateRequest_init_default            {0, false, _FanMode_MIN, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define FanId_init_default                       {0}
 #define SourceList_init_default                  {0, {SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default}}
 #define SourceCreateRequest_init_default         {_SourceType_MIN, "", 0, 0}
@@ -361,7 +365,7 @@ extern "C" {
 #define WifiStatus_init_zero                     {0, "", ""}
 #define FanList_init_zero                        {0, {FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero}}
 #define FanCreateRequest_init_zero               {0, 0, ""}
-#define FanUpdateRequest_init_zero               {0, false, _FanMode_MIN, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define FanUpdateRequest_init_zero               {0, false, _FanMode_MIN, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define FanId_init_zero                          {0}
 #define SourceList_init_zero                     {0, {SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero}}
 #define SourceCreateRequest_init_zero            {_SourceType_MIN, "", 0, 0}
@@ -444,6 +448,8 @@ extern "C" {
 #define FanUpdateRequest_group_id_tag            7
 #define FanUpdateRequest_inverted_tag            8
 #define FanUpdateRequest_enabled_tag             9
+#define FanUpdateRequest_pwm_gpio_tag            10
+#define FanUpdateRequest_tach_gpio_tag           11
 #define FanId_id_tag                             1
 #define SourceList_sources_tag                   1
 #define SourceCreateRequest_type_tag             1
@@ -594,7 +600,9 @@ X(a, STATIC,   OPTIONAL, UINT32,   curve_id,          5) \
 X(a, STATIC,   OPTIONAL, UINT32,   schedule_id,       6) \
 X(a, STATIC,   OPTIONAL, UINT32,   group_id,          7) \
 X(a, STATIC,   OPTIONAL, BOOL,     inverted,          8) \
-X(a, STATIC,   OPTIONAL, BOOL,     enabled,           9)
+X(a, STATIC,   OPTIONAL, BOOL,     enabled,           9) \
+X(a, STATIC,   OPTIONAL, UINT32,   pwm_gpio,         10) \
+X(a, STATIC,   OPTIONAL, UINT32,   tach_gpio,        11)
 #define FanUpdateRequest_CALLBACK NULL
 #define FanUpdateRequest_DEFAULT NULL
 
@@ -817,7 +825,7 @@ extern const pb_msgdesc_t StatusResponse_msg;
 #define FanId_size                               6
 #define FanInfo_size                             79
 #define FanList_size                             648
-#define FanUpdateRequest_size                    42
+#define FanUpdateRequest_size                    54
 #define HostnameRequest_size                     65
 #define ManualTempRequest_size                   11
 #define ScheduleCreateRequest_size               26
