@@ -163,7 +163,7 @@ Get-ChildItem -Path components, main -Recurse -Include *.c, *.h |
 | `f_coap`        | CoAP server lifecycle + all route handlers (`f_coap_routes.c`) |
 | `f_schema`      | Protobuf schema (`espfm.proto`) + generated nanopb code        |
 | `f_fan`         | Fan control (LEDC PWM + PCNT tach), slot registry (max 8)      |
-| `f_source`      | Temperature sources (ADC, DS18B20), slot registry (max 8)      |
+| `f_source`      | Temperature sources (ADC, DS18B20 ROM-code identity), slot registry (max 8) |
 | `f_curve`       | Fan curves (temp→duty lookup tables), slot registry (max 8)    |
 | `f_schedule`    | Time-based fan scheduling, slot registry (max 8)               |
 | `f_control`     | Control loop: reads sources, evaluates curves, sets fan duty   |
@@ -174,9 +174,9 @@ Get-ChildItem -Path components, main -Recurse -Include *.c, *.h |
 | `f_mdns`        | mDNS service advertisement                                     |
 | `f_ledc`        | LEDC PWM driver abstraction                                    |
 | `f_pcnt`        | Pulse counter (fan tachometer)                                 |
-| `f_adc`         | ADC driver                                                     |
-| `f_ds18b20`     | 1-Wire temperature sensor driver                               |
-| `f_gpio`        | GPIO pin registry and configuration                            |
+| `f_adc`         | ADC driver with ESP-IDF calibration (curve/line fitting)       |
+| `f_ds18b20`     | 1-Wire temperature sensor driver (ROM-code identity, batch conversion) |
+| `f_gpio`        | GPIO pin registry (compile-time ESP32/S3 reserved pin tables)  |
 
 ### Key Files
 
@@ -207,6 +207,8 @@ Get-ChildItem -Path components, main -Recurse -Include *.c, *.h |
 | `system/info`      | GET               | Version, uptime, heap, entity counts |
 | `system/hostname`  | PUT               | Set device hostname                  |
 | `system/reboot`    | POST              | Reboot device (2s delay)             |
+| `ds18b20/scan`     | GET               | Scan 1-Wire bus, list ROM codes+temps |
+| `ds18b20/config`   | PUT               | Set DS18B20 bus GPIO (runtime)       |
 | `wifi/scan`        | GET               | Scan for APs                         |
 | `wifi/status`      | GET               | Current WiFi connection status       |
 | `wifi/connect`     | POST              | Connect to AP                        |
@@ -259,7 +261,7 @@ python tools/espfm_shell.py --host 192.168.0.22       # connect to specific IP
 
 Dependencies: `pip install protobuf rich prompt_toolkit zeroconf`
 
-Key commands: `connect`, `fans list/get/create/update/enable/disable`, `sources list/create/temp`, `curves list/create/update`, `schedules list/create/update`, `system info/reboot`, `wifi scan/status/connect`, `dashboard`, `export/import`.
+Key commands: `connect`, `fans list/get/create/update/enable/disable`, `sources list/create/temp` (`--rom` for DS18B20), `curves list/create/update`, `schedules list/create/update`, `ds18b20 scan/config`, `system info/reboot`, `wifi scan/status/connect`, `dashboard`, `export/import`.
 
 Generated protobuf bindings: `tools/espfm_pb2.py` (regenerate with `tools/gen_proto.ps1`)
 
