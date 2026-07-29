@@ -274,7 +274,8 @@ class ESPFMClient:
             "mode": "mode", "duty": "duty", "source_id": "source_id",
             "curve_id": "curve_id", "schedule_id": "schedule_id",
             "group_id": "group_id", "inverted": "inverted",
-            "enabled": "enabled",
+            "enabled": "enabled", "pwm_gpio": "pwm_gpio",
+            "tach_gpio": "tach_gpio",
         }
         for key, field in field_map.items():
             if key in kwargs:
@@ -608,7 +609,7 @@ def _handle_fans(shell: ESPFMShell, args: list[str]) -> None:
 
         elif action == "update":
             if len(args) < 2:
-                console.print("[yellow]Usage: fans update <id> [--duty N] [--mode auto|manual] ...[/yellow]")
+                console.print("[yellow]Usage: fans update <id> [--duty N] [--mode auto|manual] [--pwm GPIO] [--tach GPIO] ...[/yellow]")
                 return
             fan_id = int(args[1])
             flags = _parse_flags(args[2:])
@@ -629,6 +630,10 @@ def _handle_fans(shell: ESPFMShell, args: list[str]) -> None:
                 kwargs["inverted"] = _parse_bool(flags["inverted"])
             if "enabled" in flags:
                 kwargs["enabled"] = _parse_bool(flags["enabled"])
+            if "pwm" in flags:
+                kwargs["pwm_gpio"] = int(flags["pwm"])
+            if "tach" in flags:
+                kwargs["tach_gpio"] = int(flags["tach"])
             if not kwargs:
                 console.print("[yellow]No fields to update.[/yellow]")
                 return
@@ -1679,7 +1684,8 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
                 "              [--group N] [--enabled] — Create fan\n"
                 "  fans update <id> [--duty N] [--mode auto|manual] [--source N]\n"
                 "                   [--curve N] [--schedule N] [--group N]\n"
-                "                   [--inverted] [--enabled] — Update fan\n"
+                "                   [--inverted] [--enabled] [--pwm GPIO] [--tach GPIO]\n"
+                "                   — Update fan\n"
                 "  fans enable <id>                     — Enable a fan\n"
                 "  fans disable <id>                    — Disable a fan\n"
                 "  fans delete <id>                     — Delete fan"
