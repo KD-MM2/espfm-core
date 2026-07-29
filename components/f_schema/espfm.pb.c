@@ -48,6 +48,9 @@ PB_BIND(SourceList, SourceList, 2)
 PB_BIND(SourceCreateRequest, SourceCreateRequest, AUTO)
 
 
+PB_BIND(SourceUpdateRequest, SourceUpdateRequest, AUTO)
+
+
 PB_BIND(ManualTempRequest, ManualTempRequest, AUTO)
 
 

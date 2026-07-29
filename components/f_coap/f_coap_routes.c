@@ -389,6 +389,39 @@ static void handle_source_post(coap_resource_t *resource, coap_session_t *sessio
     }
 }
 
+static void handle_source_put(coap_resource_t *resource, coap_session_t *session,
+                              const coap_pdu_t *req, const coap_string_t *query, coap_pdu_t *resp)
+{
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
+    char seg[COAP_MAX_SEG][COAP_MAX_SEG_LEN];
+    int nseg = parse_segments(req, seg, COAP_MAX_SEG);
+    if (nseg < 2) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
+        return;
+    }
+    uint32_t id            = (uint32_t)atoi(seg[1]);
+
+    SourceUpdateRequest ur = SourceUpdateRequest_init_default;
+    if (!decode_request(req, &ur, &SourceUpdateRequest_msg)) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
+        return;
+    }
+    f_source_info_t si;
+    if (f_source_get_info(h->source, (uint8_t)id, &si) != ESP_OK) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
+        return;
+    }
+    if (f_source_set_name(h->source, (uint8_t)id, ur.name) != ESP_OK) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
+        return;
+    }
+    save_config(h);
+    f_source_get_info(h->source, (uint8_t)id, &si);
+    static SourceInfo pb;
+    espfm_source_to_pb(&si, &pb);
+    encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &pb, &SourceInfo_msg);
+}
+
 static void handle_source_delete(coap_resource_t *resource, coap_session_t *session,
                                  const coap_pdu_t *req, const coap_string_t *query,
                                  coap_pdu_t *resp)
@@ -915,7 +948,7 @@ void f_coap_register_resources(coap_context_t *ctx, struct f_coap *h)
         snprintf(path, sizeof(path), "fans/%d", i);
         add_resource(ctx, h, path, handle_fan_get, NULL, handle_fan_put, handle_fan_delete);
         snprintf(path, sizeof(path), "sources/%d", i);
-        add_resource(ctx, h, path, handle_source_get, handle_source_post, NULL,
+        add_resource(ctx, h, path, handle_source_get, NULL, handle_source_put,
                      handle_source_delete);
         snprintf(path, sizeof(path), "curves/%d", i);
         add_resource(ctx, h, path, handle_curve_get, NULL, handle_curve_put, handle_curve_delete);

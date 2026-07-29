@@ -308,6 +308,11 @@ class ESPFMClient:
         _, data = self._post("/sources/temp", req)
         return self._decode(pb.StatusResponse, data)
 
+    def sources_update(self, source_id: int, name: str) -> pb.SourceInfo:
+        req = pb.SourceUpdateRequest(id=source_id, name=name)
+        _, data = self._put(f"/sources/{source_id}", req)
+        return self._decode(pb.SourceInfo, data)
+
     def sources_delete(self, source_id: int) -> pb.StatusResponse:
         _, data = self._delete(f"/sources/{source_id}")
         return self._decode(pb.StatusResponse, data)
@@ -665,7 +670,7 @@ def _handle_fans(shell: ESPFMShell, args: list[str]) -> None:
 
 def _handle_sources(shell: ESPFMShell, args: list[str]) -> None:
     if not args:
-        console.print("[yellow]Usage: sources <list|get|create|temp|delete> ...[/yellow]")
+        console.print("[yellow]Usage: sources <list|get|create|update|temp|delete> ...[/yellow]")
         return
     action = args[0]
     if not _check_connected(shell):
@@ -742,6 +747,15 @@ def _handle_sources(shell: ESPFMShell, args: list[str]) -> None:
             temp_c = float(args[2])
             client.sources_set_temp(sid, temp_c)
             console.print(f"[green]Set source {sid} temperature to {temp_c:.1f} C.[/green]")
+
+        elif action == "update":
+            flags = _parse_flags(args[1:])
+            if len(args) < 2 or "name" not in flags:
+                console.print("[yellow]Usage: sources update <id> --name <name>[/yellow]")
+                return
+            sid = int(args[0]) if args[0].isdigit() else int(args[1])
+            s = client.sources_update(sid, flags["name"])
+            console.print(f"[green]Updated source {s.id}:[/green] {s.name}")
 
         elif action == "delete":
             if len(args) < 2:
@@ -1675,6 +1689,7 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
                 "  sources get <id>                     — Show source detail\n"
                 "  sources create --type <ntc|ds18b20|manual> --name <n>\n"
                 "                [--gpio N] [--rom HEX] — Create source\n"
+                "  sources update <id> --name <name>    — Rename source\n"
                 "  sources temp <id> <temp_c>           — Set manual temperature\n"
                 "  sources delete <id>                  — Delete source"
             ),
@@ -1729,7 +1744,7 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
 
 [bold cyan]Resources[/bold cyan]
   fans       list | get | create | update | delete | enable | disable
-  sources    list | get | create | temp | delete
+  sources    list | get | create | update | temp | delete
   curves     list | get | create | update | delete
   schedules  list | create | update | delete
   wifi       scan | status | connect

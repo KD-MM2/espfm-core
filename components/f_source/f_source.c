@@ -161,6 +161,26 @@ cleanup:
     return ret;
 }
 
+esp_err_t f_source_set_name(f_source_handle_t handle, uint8_t id, const char *name)
+{
+    if (handle == NULL || id >= F_SOURCE_MAX_COUNT || name == NULL) return ESP_ERR_INVALID_ARG;
+
+    esp_err_t ret = ESP_OK;
+    xSemaphoreTakeRecursive(handle->mutex, portMAX_DELAY);
+
+    if (!handle->slot_used[id]) {
+        ret = ESP_ERR_NOT_FOUND;
+        goto cleanup;
+    }
+
+    strncpy(handle->sources[id].name, name, ESPFM_NAME_MAX - 1);
+    handle->sources[id].name[ESPFM_NAME_MAX - 1] = '\0';
+
+cleanup:
+    xSemaphoreGiveRecursive(handle->mutex);
+    return ret;
+}
+
 esp_err_t f_source_get_reading(f_source_handle_t handle, uint8_t id, float *temp_c_out,
                                source_status_t *status_out)
 {

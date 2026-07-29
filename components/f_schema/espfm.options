@@ -4,6 +4,7 @@ SourceInfo.name           max_size:16
 CurveInfo.name            max_size:16
 FanCreateRequest.name     max_size:16
 SourceCreateRequest.name  max_size:16
+SourceUpdateRequest.name  max_size:16
 CurveCreateRequest.name   max_size:16
 CurveUpdateRequest.name   max_size:16
 WifiConnectRequest.ssid      max_size:33

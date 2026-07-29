@@ -136,6 +136,11 @@ message SourceCreateRequest {
     uint64 ds18b20_rom_code = 4;
 }
 
+message SourceUpdateRequest {
+    uint32 id   = 1;
+    string name = 2;
+}
+
 message ManualTempRequest {
     uint32 id   = 1;
     float temp_c = 2;

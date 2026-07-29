@@ -153,6 +153,11 @@ typedef struct _SourceCreateRequest {
     uint64_t ds18b20_rom_code;
 } SourceCreateRequest;
 
+typedef struct _SourceUpdateRequest {
+    uint32_t id;
+    char name[16];
+} SourceUpdateRequest;
+
 typedef struct _ManualTempRequest {
     uint32_t id;
     float temp_c;
@@ -313,6 +318,7 @@ extern "C" {
 
 
 
+
 /* Initializer values for message structs */
 #define FanInfo_init_default                     {0, "", _FanMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _FanAlarm_MIN}
 #define SourceInfo_init_default                  {0, "", _SourceType_MIN, _SourceStatus_MIN, 0, 0, 0}
@@ -328,6 +334,7 @@ extern "C" {
 #define FanId_init_default                       {0}
 #define SourceList_init_default                  {0, {SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default}}
 #define SourceCreateRequest_init_default         {_SourceType_MIN, "", 0, 0}
+#define SourceUpdateRequest_init_default         {0, ""}
 #define ManualTempRequest_init_default           {0, 0}
 #define Ds18b20Device_init_default               {0, 0, 0}
 #define Ds18b20ScanResponse_init_default         {{{NULL}, NULL}, 0}
@@ -358,6 +365,7 @@ extern "C" {
 #define FanId_init_zero                          {0}
 #define SourceList_init_zero                     {0, {SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero}}
 #define SourceCreateRequest_init_zero            {_SourceType_MIN, "", 0, 0}
+#define SourceUpdateRequest_init_zero            {0, ""}
 #define ManualTempRequest_init_zero              {0, 0}
 #define Ds18b20Device_init_zero                  {0, 0, 0}
 #define Ds18b20ScanResponse_init_zero            {{{NULL}, NULL}, 0}
@@ -442,6 +450,8 @@ extern "C" {
 #define SourceCreateRequest_name_tag             2
 #define SourceCreateRequest_gpio_tag             3
 #define SourceCreateRequest_ds18b20_rom_code_tag 4
+#define SourceUpdateRequest_id_tag               1
+#define SourceUpdateRequest_name_tag             2
 #define ManualTempRequest_id_tag                 1
 #define ManualTempRequest_temp_c_tag             2
 #define Ds18b20Device_index_tag                  1
@@ -607,6 +617,12 @@ X(a, STATIC,   SINGULAR, UINT64,   ds18b20_rom_code,   4)
 #define SourceCreateRequest_CALLBACK NULL
 #define SourceCreateRequest_DEFAULT NULL
 
+#define SourceUpdateRequest_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
+X(a, STATIC,   SINGULAR, STRING,   name,              2)
+#define SourceUpdateRequest_CALLBACK NULL
+#define SourceUpdateRequest_DEFAULT NULL
+
 #define ManualTempRequest_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
 X(a, STATIC,   SINGULAR, FLOAT,    temp_c,            2)
@@ -734,6 +750,7 @@ extern const pb_msgdesc_t FanUpdateRequest_msg;
 extern const pb_msgdesc_t FanId_msg;
 extern const pb_msgdesc_t SourceList_msg;
 extern const pb_msgdesc_t SourceCreateRequest_msg;
+extern const pb_msgdesc_t SourceUpdateRequest_msg;
 extern const pb_msgdesc_t ManualTempRequest_msg;
 extern const pb_msgdesc_t Ds18b20Device_msg;
 extern const pb_msgdesc_t Ds18b20ScanResponse_msg;
@@ -766,6 +783,7 @@ extern const pb_msgdesc_t StatusResponse_msg;
 #define FanId_fields &FanId_msg
 #define SourceList_fields &SourceList_msg
 #define SourceCreateRequest_fields &SourceCreateRequest_msg
+#define SourceUpdateRequest_fields &SourceUpdateRequest_msg
 #define ManualTempRequest_fields &ManualTempRequest_msg
 #define Ds18b20Device_fields &Ds18b20Device_msg
 #define Ds18b20ScanResponse_fields &Ds18b20ScanResponse_msg
@@ -809,6 +827,7 @@ extern const pb_msgdesc_t StatusResponse_msg;
 #define SourceCreateRequest_size                 36
 #define SourceInfo_size                          49
 #define SourceList_size                          408
+#define SourceUpdateRequest_size                 23
 #define StatusResponse_size                      73
 #define SystemInfo_size                          114
 #define WifiApRecord_size                        57
