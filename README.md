@@ -62,54 +62,182 @@ Constraints enforced by `f_constraints`: GPIO 0-48, duty 0-100%, mode 0-1, temp 
 
 ---
 
-## Architecture
+## Interactive Shell
 
-### 4-Layer Design
+Python-based CoAP client for device management. Supports tab-completion, mDNS device discovery, and full CRUD for all entities.
 
-```
-+-- Presentation ----------------------+
-|  f_coap    CoAP server (UDP 5683)    |  libcoap-4 + nanopb Protobuf
-|  f_mdns    mDNS service advertisement|
-+-- Business Logic --------------------+
-|  f_control   1 Hz control loop       |  source -> curve -> hysteresis -> ramp -> duty
-|  f_schedule  Time-based overrides    |  60s timer, overnight wrap
-|  f_config    Persistent storage      |  LittleFS, Protobuf, 3s debounce
-|  f_constr    Input validation        |  duty, mode, GPIO, temp, schedule bounds
-+-- Registry (Domain Model) -----------+
-|  f_fan       Fan channel registry    |  8 slots, LEDC+PCNT binding
-|  f_source    Temp source registry    |  8 slots, NTC/DS18B20/manual
-|  f_curve     Fan curve registry      |  16 slots, 10-point lookup
-|  f_schedule  Schedule ruleset        |  8 slots
-+-- HAL (Hardware Abstraction) --------+
-|  f_ledc      LEDC PWM (25kHz, 11b)   |
-|  f_pcnt      PCNT pulse counter      |
-|  f_adc       ADC1 oneshot (NTC)      |
-|  f_ds18b20   RMT 1-Wire driver       |
-|  f_gpio      GPIO capability reg.    |
-|  f_wifi      APSTA + SNTP + NVS      |
-|  f_provision WiFi captive portal     |
-+--------------------------------------+
+### Install
+
+```bash
+pip install protobuf rich prompt_toolkit zeroconf
 ```
 
-### Control Loop (1 Hz)
+### Run
+
+```bash
+# Auto-connect via mDNS or connect manually
+python tools/espfm_shell.py
+
+# Connect to specific IP
+python tools/espfm_shell.py --host 192.168.0.22
+
+# Custom port and timeout
+python tools/espfm_shell.py --host 192.168.0.22 --port 5683 --timeout 5
+```
+
+### Build Standalone Executable
+
+```powershell
+# Build into a single .exe (no Python needed to run)
+.\tools\build_shell.ps1
+.\tools\dist\espfm_shell.exe --host 192.168.0.22
+```
+
+### Connection
+
+| Command | Description |
+|---------|-------------|
+| `connect <host> [--port N] [--timeout N]` | Connect to device |
+| `disconnect` | Close connection |
+| `devices scan [--timeout N]` | Scan LAN for ESPFM devices (mDNS) |
+| `devices connect XXYY` | Connect to device by MAC suffix |
+| `devices update XXYY --hostname NAME` | Change device hostname |
+
+### Fan Management
+
+| Command | Description |
+|---------|-------------|
+| `fans list` | List all fans |
+| `fans get <id>` | Show fan detail |
+| `fans create --pwm <gpio> --name <name> [--tach <gpio>]` | Create fan |
+| `fans update <id> [--duty N] [--mode auto\|manual] [--source N] [--curve N]` | Update fan |
+| `fans enable <id>` | Enable a fan |
+| `fans disable <id>` | Disable a fan |
+| `fans delete <id>` | Delete fan |
+
+### Temperature Sources
+
+| Command | Description |
+|---------|-------------|
+| `sources list` | List all sources |
+| `sources get <id>` | Show source detail |
+| `sources create --type <ntc\|ds18b20\|manual> --name <name> [--gpio N]` | Create source |
+| `sources update <id> --name <name>` | Rename source |
+| `sources temp <id> <temp_c>` | Set manual temperature |
+| `sources delete <id>` | Delete source |
+
+### Fan Curves
+
+| Command | Description |
+|---------|-------------|
+| `curves list` | List all curves |
+| `curves get <id>` | Show curve with points |
+| `curves create --name <name> --points "30:30,50:60,70:100"` | Create curve |
+| `curves update <id> [--name ...] [--points ...]` | Update curve |
+| `curves delete <id>` | Delete curve |
+
+### Schedules
+
+| Command | Description |
+|---------|-------------|
+| `schedules list` | List all schedules |
+| `schedules create --fan N --duty N --start N --end N [--enabled true\|false]` | Create schedule |
+| `schedules update <id> [--fan N] [--duty N] [--start N] [--end N]` | Update schedule |
+| `schedules delete <id>` | Delete schedule |
+
+Start/end values are minutes since midnight (e.g., `--start 480 --end 1080` = 08:00-18:00).
+
+### WiFi
+
+| Command | Description |
+|---------|-------------|
+| `wifi scan` | Scan for nearby APs |
+| `wifi status` | Show current connection status |
+| `wifi connect --ssid <name> --pass <password>` | Connect to AP |
+
+### System
+
+| Command | Description |
+|---------|-------------|
+| `system info` | Show version, uptime, heap, entity counts |
+| `system reboot` | Reboot device (2s delay) |
+
+### DS18B20
+
+| Command | Description |
+|---------|-------------|
+| `ds18b20 scan` | Scan 1-Wire bus for sensors |
+| `ds18b20 config --gpio <pin>` | Configure DS18B20 bus GPIO |
+
+### Data Operations
+
+| Command | Description |
+|---------|-------------|
+| `dashboard` | Multi-table summary of all entities |
+| `export <file.json>` | Dump full device config to JSON |
+| `import <file.json> [--no-delete]` | Apply config from JSON |
+
+### Tips
+
+- Tab-completion works for commands, flags, and enum values (`auto`, `manual`, `ntc`, etc.)
+- After `ds18b20 scan`, discovered ROM codes are added to tab-completion
+- `export`/`import` preserves fans, sources, curves, schedules, and WiFi status
+- Use `--no-delete` with `import` to avoid removing entities not in the JSON
+
+### Usage example
 
 ```
-Source temperature -> Fan Curve (linear interpolation)
-  -> Hysteresis (3% deadband) -> Ramp Limiter (10%/s up, 3%/s down)
-  -> LEDC PWM duty -> Fan
-                      |
-                 PCNT Tach -> RPM feedback -> Stall/Over-temp diagnostics
+.\espfm_shell.exe
+ESPFM Interactive Shell v1.0
+Type 'help' for commands, 'exit' to quit.
+
+espfm> devices scan
+Scanning for ESPFM devices (3.0s)...
+                      ESPFM Devices
+┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┓
+┃ Hostname   ┃ IP Address   ┃ Port ┃ Version ┃ Firmware ┃
+┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━╇━━━━━━━━━━┩
+│ espfm-b629 │ 192.168.0.22 │ 5683 │ 1       │ dev      │
+└────────────┴──────────────┴──────┴─────────┴──────────┘
+espfm> connect espfm-b629
+Connected to espfm-b629:5683
+espfm> fans list
+No fans configured.
+espfm> sources create --type manual --name gpu-manual
+Created source 0: gpu-manual (manual)
+espfm> curves create --name gpu-temp --points 40:20,50:30,60:45,70:60,80:100
+Created curve 0: gpu-temp (5 points)
+espfm> fans create --pwm 22 --tach 23 --name gpu-fan-1 --source 0 --curve 0 --mode auto --inverted true
+Created fan 0: gpu-fan-1 (PWM GPIO 22)
+espfm> sources temp 0 20
+Set source 0 temperature to 20.0 C.
+espfm> fans list
+                                                          Fans
+┏━━━━┳━━━━━━━━━┳━━━━━━┳━━━━━━━━┳━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━━┳━━━━━━━┳━━━━━━━┓
+┃    ┃         ┃      ┃        ┃      ┃         ┃         ┃    PWM ┃    Tach ┃        ┃       ┃        ┃       ┃       ┃
+┃ ID ┃ Name    ┃ Mode ┃ Duty % ┃  RPM ┃ Enabled ┃ Invert… ┃   GPIO ┃    GPIO ┃ Source ┃ Curve ┃ Sched… ┃ Group ┃ Alarm ┃
+┡━━━━╇━━━━━━━━━╇━━━━━━╇━━━━━━━━╇━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━━╇━━━━━━━╇━━━━━━━┩
+│  0 │ gpu-fa… │ auto │     20 │ 3090 │ yes     │ yes     │     22 │      23 │      0 │     0 │      - │     0 │ none  │
+└────┴─────────┴──────┴────────┴──────┴─────────┴─────────┴────────┴─────────┴────────┴───────┴────────┴───────┴───────┘
+espfm> fans get 0
+╭─────────────────────────────────────────────────────── Fan 0 ────────────────────────────────────────────────────────╮
+│ Fan 0                                                                                                                │
+│   Name:      gpu-fan-1                                                                                               │
+│   Mode:      auto                                                                                                    │
+│   Duty:      20%                                                                                                     │
+│   RPM:       3120                                                                                                    │
+│   Enabled:   yes                                                                                                     │
+│   Inverted:  yes                                                                                                     │
+│   PWM GPIO:  22                                                                                                      │
+│   Tach GPIO: 23                                                                                                      │
+│   Source:    0                                                                                                       │
+│   Curve:     0                                                                                                       │
+│   Schedule:  none                                                                                                    │
+│   Group:     0                                                                                                       │
+│   Alarm:     none                                                                                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+espfm>
 ```
-
-### Stack
-
-| Layer | Technology | Notes |
-|-------|-----------|-------|
-| Transport | libcoap-4 (`espressif/coap ^4.3.5`) | UDP CoAP server, single `coap_task` thread |
-| Serialization | nanopb-0.4.9.1 | Proto at `components/f_schema/proto/espfm.proto` |
-| Storage | NVS + LittleFS | `f_config` persists fan/source/curve/schedule configs |
-| WiFi | `f_wifi` + captive portal provisioning | `f_provision` for initial WiFi setup |
-| mDNS | `f_mdns` | Advertises `_coap._udp` service |
 
 ---
 
@@ -176,39 +304,6 @@ All endpoints use CoAP over UDP port 5683. Request/response bodies are Protobuf-
 
 ---
 
-## Interactive Shell
-
-Python-based CoAP client for device management.
-
-```bash
-# Install dependencies
-pip install protobuf rich prompt_toolkit zeroconf
-
-# Connect (auto-discovers via mDNS)
-python tools/espfm_shell.py
-
-# Connect to specific IP
-python tools/espfm_shell.py --host 192.168.0.22
-```
-
-### Shell Commands
-
-| Command | Description |
-|---------|-------------|
-| `connect <host>` | Connect to device |
-| `disconnect` | Close connection |
-| `fans list / get / create / update / delete / enable / disable` | Fan management |
-| `sources list / get / create / temp / delete` | Temperature source management |
-| `curves list / get / create / update / delete` | Fan curve management |
-| `schedules list / create / update / delete` | Schedule management |
-| `wifi scan / status / connect` | WiFi management |
-| `system info / reboot` | System info and reboot |
-| `dashboard` | Multi-table summary |
-| `export <file.json>` | Dump config to JSON |
-| `import <file.json>` | Apply config from JSON |
-
----
-
 ## Concepts
 
 ### Fan Modes
@@ -241,61 +336,9 @@ Schedules use **minutes since midnight** (0-1439). Example: `start_min: 480` = 0
 
 ## Configuration
 
-### Kconfig (`idf.py menuconfig`)
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `ESPFM_WIFI_SSID` | myssid | STA SSID |
-| `ESPFM_WIFI_PASSWORD` | mypassword | STA password |
-| `ESPFM_WIFI_MAX_RETRY` | 5 | Max STA connection attempts |
-| `ESPFM_OVERTEMP_THRESHOLD_C` | 85 | Over-temp alarm trigger |
-
 ### Persistent Config
 
 Saved to `/littlefs/config.pb` (Protobuf) on every API mutation (3-second debounce). Loaded automatically at boot. Uses the `ConfigFile` Protobuf message — see `components/f_schema/proto/espfm.proto`.
-
----
-
-## Build & Flash
-
-```powershell
-& 'C:\Espressif\tools\Microsoft.v6.0.1.PowerShell_profile.ps1'
-
-# Configure
-idf.py menuconfig
-
-# Build
-idf.py build
-
-# Flash + monitor
-idf.py flash monitor
-```
-
-### Partition Layout (4MB flash)
-
-| Offset | Size | Partition |
-|--------|------|-----------|
-| 0x00000 | 8KB | bootloader |
-| 0x08000 | 16KB | partition_table |
-| 0x10000 | 2MB | factory (app) |
-| 0x200000 | 2MB | storage (LittleFS) |
-
-### Protobuf Code Generation
-
-```powershell
-# Regenerate nanopb after editing espfm.proto
-tools/gen_proto.ps1
-```
-
-Or manually:
-```powershell
-& 'C:\Espressif\tools\Microsoft.v6.0.1.PowerShell_profile.ps1'
-python C:/Espressif/tools/python/v6.0.1/venv/Lib/site-packages/nanopb/generator/nanopb_generator.py `
-  -I components/f_schema/proto -I components/f_schema -D components/f_schema/ `
-  components/f_schema/proto/espfm.proto
-```
-
-Generated files: `components/f_schema/espfm.pb.h`, `components/f_schema/espfm.pb.c`
 
 ---
 
@@ -312,30 +355,6 @@ Generated files: `components/f_schema/espfm.pb.h`, `components/f_schema/espfm.pb
 
 ---
 
-## Project Status
+## Development
 
-| Phase | Status |
-|-------|--------|
-| v2 Redesign (30 tasks) | **100%** Complete |
-| v3 CoAP+Protobuf Refactor | **100%** Complete |
-| CoAP endpoint suite | **Working** on device |
-
-### v3 Changes from v2
-
-- HTTP REST API replaced with CoAP+Protobuf (UDP, lighter for IoT)
-- `f_http` component removed, replaced by `f_coap` (libcoap-4)
-- Config storage migrated from JSON (cJSON) to Protobuf (nanopb)
-- Interactive shell (`tools/espfm_shell.py`) replaces browser dashboard for management
-- mDNS service discovery added
-
----
-
-## Tech Stack
-
-- **C11** — firmware language
-- **ESP-IDF v6.0.1** — framework
-- **FreeRTOS** — task scheduling
-- **libcoap-4** — CoAP server (UDP)
-- **nanopb** — Protobuf codec for embedded
-- **LittleFS** — persistent config storage
-- **Python** — interactive shell client
+See [DEVELOPMENT.md](DEVELOPMENT.md) for build instructions, architecture details, protobuf codegen, and tech stack.
