@@ -1,6 +1,6 @@
 # ESPFanManager v1
 
-ESP32-S3 multi-channel smart fan controller with CoAP+Protobuf API, interactive shell, and persistent configuration.
+ESP32/ESP32-S3 multi-channel smart fan controller with CoAP+Protobuf API, interactive shell, and persistent configuration.
 
 **Requires ESP-IDF v6.0.1+**
 
@@ -46,19 +46,34 @@ After boot, the device starts in AP+STA mode. If STA fails, it falls back to ope
 | NTC thermistor | ADC1 oneshot | — | 10k NTC + 10k divider, Beta-equation conversion |
 | DS18B20 1-Wire | RMT-based 1-Wire | 8 sensors per bus | 750ms conversion, blocking read |
 
-### GPIO Constraints (ESP32-S3)
+### GPIO Constraints
+
+Reserved pins are enforced at runtime by `f_gpio`. Available GPIOs differ by target:
+
+**ESP32-S3** (GPIO 0-48):
 
 | GPIO | Status | Use |
 |------|--------|-----|
-| 0 | Reserved | Strapping pin (boot mode) |
-| 3 | Reserved | Strapping pin (JTAG) |
-| 19, 20 | USB D-/D+ | USB-serial-JTAG (avoid for fans) |
-| 26-32 | PSRAM | Octal PSRAM (flash-dependent) |
-| 33-37 | PSRAM | Octal PSRAM (flash-dependent) |
-| 45, 46 | Reserved | Strapping / VDD_SPI |
+| 0 | Reserved | U0TXD (console) |
+| 1 | Reserved | U0RXD (console) |
+| 2 | Reserved | Strapping |
+| 3 | Reserved | JTAG |
+| 19, 20 | Reserved | USB D-/D+ |
+| 45, 46 | Reserved | PSRAM |
 | All others | Available | PWM, tach, ADC, 1-Wire |
 
-Constraints enforced by `f_constraints`: GPIO 0-48, duty 0-100%, mode 0-1, temp -40 to +125 C, schedule 0-1439 min.
+**ESP32** (GPIO 0-39):
+
+| GPIO | Status | Use |
+|------|--------|-----|
+| 1 | Reserved | UART0 TX (console) |
+| 3 | Reserved | UART0 RX (console) |
+| 6-11 | Reserved | Flash SPI |
+| 16, 17 | Reserved | PSRAM (WROVER) |
+| 34-39 | Input-only | No pull-up, ADC input |
+| All others | Available | PWM, tach, ADC, 1-Wire |
+
+Constraints enforced by `f_constraints`: duty 0-100%, mode 0-1, temp -40 to +125 C, schedule 0-1439 min.
 
 ---
 
@@ -251,9 +266,9 @@ All endpoints use CoAP over UDP port 5683. Request/response bodies are Protobuf-
 |--------|------|-------------|
 | GET | `fans` | List all fans |
 | POST | `fans` | Create fan |
-| GET | `fans/{0..7}` | Get fan by ID |
-| PUT | `fans/{0..7}` | Update fan (mode, duty, source, curve, schedule, group, inverted, enabled) |
-| DELETE | `fans/{0..7}` | Delete fan |
+| GET | `fans/{0..MAX_FAN-1}` | Get fan by ID |
+| PUT | `fans/{0..MAX_FAN-1}` | Update fan (mode, duty, source, curve, schedule, group, inverted, enabled) |
+| DELETE | `fans/{0..MAX_FAN-1}` | Delete fan |
 
 ### Source Endpoints
 
@@ -261,9 +276,9 @@ All endpoints use CoAP over UDP port 5683. Request/response bodies are Protobuf-
 |--------|------|-------------|
 | GET | `sources` | List all sources |
 | POST | `sources` | Create source |
-| GET | `sources/{0..7}` | Get source by ID |
-| POST | `sources/{0..7}` | Update source |
-| DELETE | `sources/{0..7}` | Delete source |
+| GET | `sources/{0..MAX_SOURCE-1}` | Get source by ID |
+| POST | `sources/{0..MAX_SOURCE-1}` | Update source |
+| DELETE | `sources/{0..MAX_SOURCE-1}` | Delete source |
 | POST | `sources/temp` | Set manual source temperature |
 
 ### Curve Endpoints
@@ -272,9 +287,9 @@ All endpoints use CoAP over UDP port 5683. Request/response bodies are Protobuf-
 |--------|------|-------------|
 | GET | `curves` | List all curves |
 | POST | `curves` | Create curve |
-| GET | `curves/{0..7}` | Get curve by ID |
-| PUT | `curves/{0..7}` | Update curve |
-| DELETE | `curves/{0..7}` | Delete curve |
+| GET | `curves/{0..MAX_CURVE-1}` | Get curve by ID |
+| PUT | `curves/{0..MAX_CURVE-1}` | Update curve |
+| DELETE | `curves/{0..MAX_CURVE-1}` | Delete curve |
 
 ### Schedule Endpoints
 
@@ -282,9 +297,9 @@ All endpoints use CoAP over UDP port 5683. Request/response bodies are Protobuf-
 |--------|------|-------------|
 | GET | `schedules` | List all schedules |
 | POST | `schedules` | Create schedule |
-| GET | `schedules/{0..7}` | Get schedule by ID |
-| PUT | `schedules/{0..7}` | Update schedule |
-| DELETE | `schedules/{0..7}` | Delete schedule |
+| GET | `schedules/{0..MAX_SCHED-1}` | Get schedule by ID |
+| PUT | `schedules/{0..MAX_SCHED-1}` | Update schedule |
+| DELETE | `schedules/{0..MAX_SCHED-1}` | Delete schedule |
 
 ### System Endpoints
 

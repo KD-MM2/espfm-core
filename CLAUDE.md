@@ -195,15 +195,15 @@ Get-ChildItem -Path components, main -Recurse -Include *.c, *.h |
 
 | Path               | Methods           | Handler                              |
 | ------------------ | ----------------- | ------------------------------------ |
-| `fans`             | GET, POST         | List fans, create fan                |
-| `fans/{0..7}`      | GET, PUT, DELETE  | Get/update/delete fan by ID          |
-| `sources`          | GET, POST         | List sources, create source          |
-| `sources/{0..7}`   | GET, POST, DELETE | Get/update/delete source by ID       |
-| `sources/temp`     | POST              | Manual temperature update            |
-| `curves`           | GET, POST         | List curves, create curve            |
-| `curves/{0..7}`    | GET, PUT, DELETE  | Get/update/delete curve by ID        |
-| `schedules`        | GET, POST         | List schedules, create schedule      |
-| `schedules/{0..7}` | GET, PUT, DELETE  | Get/update/delete schedule by ID     |
+| `fans`                       | GET, POST         | List fans, create fan                |
+| `fans/{0..MAX_FAN-1}`        | GET, PUT, DELETE  | Get/update/delete fan by ID          |
+| `sources`                    | GET, POST         | List sources, create source          |
+| `sources/{0..MAX_SOURCE-1}`  | GET, POST, DELETE | Get/update/delete source by ID       |
+| `sources/temp`               | POST              | Manual temperature update            |
+| `curves`                     | GET, POST         | List curves, create curve            |
+| `curves/{0..MAX_CURVE-1}`    | GET, PUT, DELETE  | Get/update/delete curve by ID        |
+| `schedules`                  | GET, POST         | List schedules, create schedule      |
+| `schedules/{0..MAX_SCHED-1}` | GET, PUT, DELETE  | Get/update/delete schedule by ID     |
 | `system/info`      | GET               | Version, uptime, heap, entity counts |
 | `system/hostname`  | PUT               | Set device hostname                  |
 | `system/reboot`    | POST              | Reboot device (2s delay)             |
@@ -282,7 +282,7 @@ When working on this project, invoke the relevant skill for the task at hand. Sk
 | `cpp-pro`            | Writing, optimizing, or debugging C/C++ code with modern C++20/23 features, templates, CMake.                         |
 | `embedded-systems`   | Developing firmware for microcontrollers, RTOS, peripheral drivers, interrupt handlers, power optimization.           |
 | `build`              | Build, upload, monitor, or clean the ESP-IDF project.                                                                 |
-| `gpio-config`        | GPIO pin configuration, wiring, pin mapping, pin conflicts on ESP32.                                                  |
+| `gpio-config`        | GPIO pin configuration, wiring, pin mapping, pin conflicts on ESP32/ESP32-S3.                                         |
 
 ### Skill Application Mapping
 
