@@ -96,3 +96,4 @@ esp-bsp/
 tools/espfm_shell.spec
 tools/build/
 tools/dist/
+CONTEXT.md
