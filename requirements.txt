@@ -2,4 +2,5 @@ prompt-toolkit==3.0.52
 protobuf==6.33.6
 rich==15.0.0
 nanopb==0.4.9.1
-zeroconf
+zeroconf==0.150.0
+pyinstaller==6.21.0

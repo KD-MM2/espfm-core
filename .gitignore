@@ -93,3 +93,6 @@ flash_output.txt
 idf-extra-components/
 esp-bsp/
 .superpowers/
+tools/espfm_shell.spec
+tools/build/
+tools/dist/

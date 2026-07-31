@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ESPFM Interactive Shell — CoAP+Protobuf client for ESPFanManager v3.
+ESPFM Interactive Shell — CoAP+Protobuf client for ESPFanManager v1.
 
 Usage:
     python espfm_shell.py
@@ -975,7 +975,7 @@ def _handle_wifi(shell: ESPFMShell, args: list[str]) -> None:
         elif action == "status":
             ws = client.wifi_status()
             lines = [
-                f"[bold]WiFi Status[/bold]",
+                "[bold]WiFi Status[/bold]",
                 f"  STA Connected: {'yes' if ws.sta_connected else 'no'}",
                 f"  STA IP:        {ws.sta_ip or 'none'}",
                 f"  AP IP:         {ws.ap_ip or 'none'}",
@@ -1413,7 +1413,7 @@ def _handle_export(shell: ESPFMShell, args: list[str]) -> None:
 
     try:
         data: dict[str, Any] = {
-            "version": "3.0",
+            "version": "1.0",
             "exported_at": datetime.datetime.now().isoformat(timespec="seconds"),
             "device": shell.transport.host,
         }
@@ -1795,7 +1795,7 @@ def _parse_flags(tokens: list[str]) -> dict[str, str]:
 
 
 class ESPFMShell:
-    """Interactive shell for ESPFanManager v3."""
+    """Interactive shell for ESPFanManager v1."""
 
     def __init__(self, host: str = "", port: int = 5683, timeout: float = 3.0) -> None:
         self.transport = CoAPTransport(host, port, timeout)
@@ -1839,7 +1839,7 @@ class ESPFMShell:
             completer=completer,
         )
 
-        console.print("[bold]ESPFM Interactive Shell v3.0[/bold]")
+        console.print("[bold]ESPFM Interactive Shell v1.0[/bold]")
         console.print("Type 'help' for commands, 'exit' to quit.\n")
 
         while True:
@@ -1913,7 +1913,7 @@ class ESPFMShell:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="ESPFM Interactive Shell v3")
+    parser = argparse.ArgumentParser(description="ESPFM Interactive Shell v1")
     parser.add_argument("--host", default="", help="Device IP (auto-connects)")
     parser.add_argument("--port", type=int, default=5683, help="CoAP port")
     parser.add_argument("--timeout", type=float, default=3.0, help="CoAP timeout (seconds)")
