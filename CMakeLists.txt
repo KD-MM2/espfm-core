@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 set(EXTRA_COMPONENT_DIRS components)
-project(espfm-core)
+project(espfm-core VERSION 1.0.0)
 littlefs_create_partition_image(storage data FLASH_IN_PROJECT)

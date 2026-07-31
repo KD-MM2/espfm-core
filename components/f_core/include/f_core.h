@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 /* --- Version --- */
-#define ESPFM_VERSION_MAJOR 2
+#define ESPFM_VERSION_MAJOR 1
 #define ESPFM_VERSION_MINOR 0
 #define ESPFM_VERSION_PATCH 0
 

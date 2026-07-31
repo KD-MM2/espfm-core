@@ -1,4 +1,4 @@
-# ESPFanManager v3
+# ESPFanManager v1
 
 ESP32-S3 multi-channel smart fan controller with CoAP+Protobuf API, interactive shell, and persistent configuration.
 
