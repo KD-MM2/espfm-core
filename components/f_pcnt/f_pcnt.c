@@ -7,6 +7,7 @@ static const char *TAG = "f_pcnt";
 
 struct f_pcnt {
     pcnt_unit_handle_t units[F_PCNT_MAX_UNITS];
+    pcnt_channel_handle_t channels[F_PCNT_MAX_UNITS];
     bool unit_in_use[F_PCNT_MAX_UNITS];
     uint8_t unit_gpio[F_PCNT_MAX_UNITS];
 };
@@ -63,6 +64,7 @@ esp_err_t f_pcnt_add_input(f_pcnt_handle_t handle, uint8_t gpio, uint8_t *unit_i
     ESP_ERROR_CHECK(pcnt_unit_start(unit));
 
     handle->units[slot]       = unit;
+    handle->channels[slot]    = chan;
     handle->unit_in_use[slot] = true;
     handle->unit_gpio[slot]   = gpio;
     *unit_id_out              = (uint8_t)slot;
@@ -102,6 +104,10 @@ esp_err_t f_pcnt_remove_input(f_pcnt_handle_t handle, uint8_t unit_id)
     if (!handle->unit_in_use[unit_id]) return ESP_ERR_INVALID_STATE;
 
     pcnt_unit_stop(handle->units[unit_id]);
+    if (handle->channels[unit_id] != NULL) {
+        pcnt_del_channel(handle->channels[unit_id]);
+        handle->channels[unit_id] = NULL;
+    }
     pcnt_unit_disable(handle->units[unit_id]);
     pcnt_del_unit(handle->units[unit_id]);
     handle->units[unit_id]       = NULL;

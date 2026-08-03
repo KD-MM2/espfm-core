@@ -1,0 +1,52 @@
+{
+  "version": "1.0",
+  "profile": "espfm-v3",
+  "description": "ESP-WROOM-32 + MP2315 — 6ch fan, 4x NTC, 1x OneWire",
+  "fans": [
+    { "id": 0, "name": "Fan 1", "pwm_gpio": 22, "tach_gpio": 23, "mode": "auto", "duty": 0, "enabled": true, "inverted": false, "source_id": 255, "curve_id": 255, "schedule_id": 255, "group_id": 255 },
+    { "id": 1, "name": "Fan 2", "pwm_gpio": 19, "tach_gpio": 21, "mode": "auto", "duty": 0, "enabled": true, "inverted": false, "source_id": 255, "curve_id": 255, "schedule_id": 255, "group_id": 255 },
+    { "id": 2, "name": "Fan 3", "pwm_gpio":  5, "tach_gpio": 18, "mode": "auto", "duty": 0, "enabled": true, "inverted": false, "source_id": 255, "curve_id": 255, "schedule_id": 255, "group_id": 255 },
+    { "id": 3, "name": "Fan 4", "pwm_gpio": 16, "tach_gpio": 17, "mode": "auto", "duty": 0, "enabled": true, "inverted": false, "source_id": 255, "curve_id": 255, "schedule_id": 255, "group_id": 255 },
+    { "id": 4, "name": "Fan 5", "pwm_gpio": 26, "tach_gpio": 27, "mode": "auto", "duty": 0, "enabled": true, "inverted": false, "source_id": 255, "curve_id": 255, "schedule_id": 255, "group_id": 255 },
+    { "id": 5, "name": "Fan 6", "pwm_gpio": 33, "tach_gpio": 25, "mode": "auto", "duty": 0, "enabled": true, "inverted": false, "source_id": 255, "curve_id": 255, "schedule_id": 255, "group_id": 255 }
+  ],
+  "sources": [
+    { "id": 0, "name": "NTC 1", "type": "ntc", "gpio": 36 },
+    { "id": 1, "name": "NTC 2", "type": "ntc", "gpio": 39 },
+    { "id": 2, "name": "NTC 3", "type": "ntc", "gpio": 34 },
+    { "id": 3, "name": "NTC 4", "type": "ntc", "gpio": 35 },
+    { "id": 4, "name": "DS18B20", "type": "ds18b20", "gpio": 32 }
+  ],
+  "curves": [
+    {
+      "id": 0, "name": "Silent",
+      "points": [
+        { "temp_c": 30, "duty": 20 },
+        { "temp_c": 40, "duty": 30 },
+        { "temp_c": 50, "duty": 50 },
+        { "temp_c": 60, "duty": 70 },
+        { "temp_c": 70, "duty": 100 }
+      ]
+    },
+    {
+      "id": 1, "name": "Balanced",
+      "points": [
+        { "temp_c": 30, "duty": 30 },
+        { "temp_c": 40, "duty": 45 },
+        { "temp_c": 50, "duty": 65 },
+        { "temp_c": 60, "duty": 85 },
+        { "temp_c": 70, "duty": 100 }
+      ]
+    },
+    {
+      "id": 2, "name": "Aggressive",
+      "points": [
+        { "temp_c": 30, "duty": 40 },
+        { "temp_c": 40, "duty": 60 },
+        { "temp_c": 50, "duty": 80 },
+        { "temp_c": 60, "duty": 100 }
+      ]
+    }
+  ],
+  "schedules": []
+}

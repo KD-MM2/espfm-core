@@ -1,0 +1,51 @@
+{
+  "version": "1.0",
+  "profile": "espfm-v1",
+  "description": "ESP32 DevKitC — 4ch fan, 4x NTC, 2x OneWire",
+  "fans": [
+    { "id": 0, "name": "Fan 1", "pwm_gpio": 22, "tach_gpio": 23, "mode": "auto", "duty": 0, "enabled": true, "inverted": false, "source_id": 255, "curve_id": 255, "schedule_id": 255, "group_id": 255 },
+    { "id": 1, "name": "Fan 2", "pwm_gpio": 19, "tach_gpio": 21, "mode": "auto", "duty": 0, "enabled": true, "inverted": false, "source_id": 255, "curve_id": 255, "schedule_id": 255, "group_id": 255 },
+    { "id": 2, "name": "Fan 3", "pwm_gpio":  5, "tach_gpio": 18, "mode": "auto", "duty": 0, "enabled": true, "inverted": false, "source_id": 255, "curve_id": 255, "schedule_id": 255, "group_id": 255 },
+    { "id": 3, "name": "Fan 4", "pwm_gpio": 16, "tach_gpio": 17, "mode": "auto", "duty": 0, "enabled": true, "inverted": false, "source_id": 255, "curve_id": 255, "schedule_id": 255, "group_id": 255 }
+  ],
+  "sources": [
+    { "id": 0, "name": "NTC 1", "type": "ntc", "gpio": 36 },
+    { "id": 1, "name": "NTC 2", "type": "ntc", "gpio": 39 },
+    { "id": 2, "name": "NTC 3", "type": "ntc", "gpio": 34 },
+    { "id": 3, "name": "NTC 4", "type": "ntc", "gpio": 35 },
+    { "id": 4, "name": "DS18B20 A", "type": "ds18b20", "gpio": 32 },
+    { "id": 5, "name": "DS18B20 B", "type": "ds18b20", "gpio": 33 }
+  ],
+  "curves": [
+    {
+      "id": 0, "name": "Silent",
+      "points": [
+        { "temp_c": 30, "duty": 20 },
+        { "temp_c": 40, "duty": 30 },
+        { "temp_c": 50, "duty": 50 },
+        { "temp_c": 60, "duty": 70 },
+        { "temp_c": 70, "duty": 100 }
+      ]
+    },
+    {
+      "id": 1, "name": "Balanced",
+      "points": [
+        { "temp_c": 30, "duty": 30 },
+        { "temp_c": 40, "duty": 45 },
+        { "temp_c": 50, "duty": 65 },
+        { "temp_c": 60, "duty": 85 },
+        { "temp_c": 70, "duty": 100 }
+      ]
+    },
+    {
+      "id": 2, "name": "Aggressive",
+      "points": [
+        { "temp_c": 30, "duty": 40 },
+        { "temp_c": 40, "duty": 60 },
+        { "temp_c": 50, "duty": 80 },
+        { "temp_c": 60, "duty": 100 }
+      ]
+    }
+  ],
+  "schedules": []
+}

@@ -339,11 +339,23 @@ class ESPFMClient:
         self, curve_id: int, name: str = "", points: list[tuple[float, int]] | None = None
     ) -> pb.CurveInfo:
         req = pb.CurveUpdateRequest(id=curve_id)
+        # Always send name if provided
         if name:
             req.name = name
+        # Always send points if provided
         if points:
             for temp_c, duty in points:
                 req.points.append(pb.CurvePoint(temp_c=temp_c, duty=duty))
+        _, data = self._put(f"/curves/{curve_id}", req)
+        return self._decode(pb.CurveInfo, data)
+
+    def curves_replace(
+        self, curve_id: int, name: str, points: list[tuple[float, int]]
+    ) -> pb.CurveInfo:
+        """Full replace — always sends both name and points."""
+        req = pb.CurveUpdateRequest(id=curve_id, name=name)
+        for temp_c, duty in points:
+            req.points.append(pb.CurvePoint(temp_c=temp_c, duty=duty))
         _, data = self._put(f"/curves/{curve_id}", req)
         return self._decode(pb.CurveInfo, data)
 
@@ -1504,7 +1516,7 @@ def _handle_export(shell: ESPFMShell, args: list[str]) -> None:
 
 def _handle_import(shell: ESPFMShell, args: list[str]) -> None:
     if not args:
-        console.print("[yellow]Usage: import <file.json> [--no-delete][/yellow]")
+        console.print("[yellow]Usage: import <file.json> [--clean] [--no-delete][/yellow]")
         return
     if not _check_connected(shell):
         return
@@ -1512,6 +1524,7 @@ def _handle_import(shell: ESPFMShell, args: list[str]) -> None:
     filepath = args[0]
     flags = _parse_flags(args[1:])
     no_delete = "no-delete" in flags
+    clean = "clean" in flags
 
     try:
         with open(filepath, "r", encoding="utf-8") as f:
@@ -1519,6 +1532,22 @@ def _handle_import(shell: ESPFMShell, args: list[str]) -> None:
     except (OSError, json.JSONDecodeError) as e:
         console.print(f"[red]Invalid JSON: {e}[/red]")
         return
+
+    # --clean: wipe all existing entities before import
+    if clean:
+        try:
+            for c in client.curves_list().curves:
+                client.curves_delete(c.id)
+            for s in client.sources_list().sources:
+                client.sources_delete(s.id)
+            for f in client.fans_list().fans:
+                client.fans_delete(f.id)
+            for s in client.schedules_list().schedules:
+                client.schedules_delete(s.id)
+            console.print("[dim]Cleaned all existing entities.[/dim]")
+        except CoapError as e:
+            console.print(f"[red]Clean failed: {_error_message(e)}[/red]")
+            return
 
     created = updated = deleted = 0
 
@@ -1603,15 +1632,15 @@ def _handle_import(shell: ESPFMShell, args: list[str]) -> None:
                 created += 1
             else:
                 dc = device_curves[cid]
-                name_changed = jc.get("name", dc.name) != dc.name
+                new_name = jc.get("name", dc.name)
+                name_changed = new_name != dc.name
                 pts_changed = len(points) != len(dc.points) or any(
                     abs(p[0] - dp.temp_c) > 0.01 or p[1] != dp.duty
                     for p, dp in zip(points, dc.points)
                 )
                 if name_changed or pts_changed:
-                    client.curves_update(
-                        cid, name=jc.get("name", ""), points=points if pts_changed else None,
-                    )
+                    # Always send both name and points (curve upsert is full-replace)
+                    client.curves_replace(cid, name=new_name, points=points)
                     updated += 1
 
         if not no_delete:
@@ -1742,7 +1771,7 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
             ),
             "dashboard": "dashboard  — Poll all resources, show multi-table summary",
             "export": "export <file.json>  — Dump full device state to JSON",
-            "import": "import <file.json> [--no-delete]  — Apply config from JSON",
+            "import": "import <file.json> [--clean] [--no-delete]  — Apply config from JSON",
         }
         if topic in help_texts:
             console.print(help_texts[topic])
@@ -1771,7 +1800,7 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
 [bold cyan]Data Operations[/bold cyan]
   dashboard                 Multi-table summary
   export <file.json>        Dump config to JSON
-  import <file.json> [--no-delete]  Apply config from JSON"""
+  import <file.json> [--clean] [--no-delete]  Apply config from JSON"""
     console.print(Panel(text, title="Help"))
 
 
