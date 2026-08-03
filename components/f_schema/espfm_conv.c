@@ -85,4 +85,6 @@ void espfm_schedule_to_pb(const f_schedule_info_t *si, ScheduleInfo *pb)
     pb->start_min = si->start_min;
     pb->end_min   = si->end_min;
     pb->enabled   = si->enabled;
+    strncpy(pb->name, si->name, sizeof(pb->name) - 1);
+    pb->name[sizeof(pb->name) - 1] = '\0';
 }

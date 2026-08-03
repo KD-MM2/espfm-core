@@ -275,7 +275,7 @@ class ESPFMClient:
             "curve_id": "curve_id", "schedule_id": "schedule_id",
             "group_id": "group_id", "inverted": "inverted",
             "enabled": "enabled", "pwm_gpio": "pwm_gpio",
-            "tach_gpio": "tach_gpio",
+            "tach_gpio": "tach_gpio", "name": "name",
         }
         for key, field in field_map.items():
             if key in kwargs:
@@ -358,11 +358,12 @@ class ESPFMClient:
         return self._decode(pb.ScheduleList, data)
 
     def schedules_create(
-        self, fan_id: int, duty: int, start_min: int, end_min: int, enabled: bool = True
+        self, fan_id: int, duty: int, start_min: int, end_min: int, enabled: bool = True,
+        name: str = "",
     ) -> pb.ScheduleInfo:
         req = pb.ScheduleCreateRequest(
             fan_id=fan_id, duty=duty, start_min=start_min,
-            end_min=end_min, enabled=enabled,
+            end_min=end_min, enabled=enabled, name=name,
         )
         _, data = self._post("/schedules", req)
         return self._decode(pb.ScheduleInfo, data)
@@ -372,6 +373,7 @@ class ESPFMClient:
         field_map = {
             "fan_id": "fan_id", "duty": "duty",
             "start_min": "start_min", "end_min": "end_min", "enabled": "enabled",
+            "name": "name",
         }
         for key, field in field_map.items():
             if key in kwargs:
@@ -609,11 +611,13 @@ def _handle_fans(shell: ESPFMShell, args: list[str]) -> None:
 
         elif action == "update":
             if len(args) < 2:
-                console.print("[yellow]Usage: fans update <id> [--duty N] [--mode auto|manual] [--pwm GPIO] [--tach GPIO] ...[/yellow]")
+                console.print("[yellow]Usage: fans update <id> [--name NAME] [--duty N] [--mode auto|manual] [--pwm GPIO] [--tach GPIO] ...[/yellow]")
                 return
             fan_id = int(args[1])
             flags = _parse_flags(args[2:])
             kwargs: dict[str, Any] = {}
+            if "name" in flags:
+                kwargs["name"] = flags["name"]
             if "duty" in flags:
                 kwargs["duty"] = int(flags["duty"])
             if "mode" in flags:
@@ -871,6 +875,7 @@ def _handle_schedules(shell: ESPFMShell, args: list[str]) -> None:
                 return
             table = Table(title="Schedules")
             table.add_column("ID", justify="right")
+            table.add_column("Name")
             table.add_column("Fan", justify="right")
             table.add_column("Duty %", justify="right")
             table.add_column("Start")
@@ -878,7 +883,7 @@ def _handle_schedules(shell: ESPFMShell, args: list[str]) -> None:
             table.add_column("Enabled")
             for s in result.schedules:
                 table.add_row(
-                    str(s.id), str(s.fan_id), str(s.duty),
+                    str(s.id), s.name or "—", str(s.fan_id), str(s.duty),
                     _fmt_minutes(s.start_min), _fmt_minutes(s.end_min),
                     "yes" if s.enabled else "no",
                 )
@@ -899,6 +904,7 @@ def _handle_schedules(shell: ESPFMShell, args: list[str]) -> None:
                 start_min=int(flags["start"]),
                 end_min=int(flags["end"]),
                 enabled=_parse_bool(flags.get("enabled", "true")),
+                name=flags.get("name", ""),
             )
             console.print(
                 f"[green]Created schedule {s.id}:[/green] fan {s.fan_id}, "
@@ -907,11 +913,13 @@ def _handle_schedules(shell: ESPFMShell, args: list[str]) -> None:
 
         elif action == "update":
             if len(args) < 2:
-                console.print("[yellow]Usage: schedules update <id> [--fan N] [--duty N] ...[/yellow]")
+                console.print("[yellow]Usage: schedules update <id> [--name NAME] [--fan N] [--duty N] ...[/yellow]")
                 return
             sid = int(args[1])
             flags = _parse_flags(args[2:])
             kwargs: dict[str, Any] = {}
+            if "name" in flags:
+                kwargs["name"] = flags["name"]
             if "fan" in flags:
                 kwargs["fan_id"] = int(flags["fan"])
             if "duty" in flags:
@@ -1682,8 +1690,8 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
                 "  fans create --pwm <gpio> --name <n> [--tach <gpio>] [--source N]\n"
                 "              [--curve N] [--mode auto|manual] [--inverted]\n"
                 "              [--group N] [--enabled] — Create fan\n"
-                "  fans update <id> [--duty N] [--mode auto|manual] [--source N]\n"
-                "                   [--curve N] [--schedule N] [--group N]\n"
+                "  fans update <id> [--name NAME] [--duty N] [--mode auto|manual]\n"
+                "                   [--source N] [--curve N] [--schedule N] [--group N]\n"
                 "                   [--inverted] [--enabled] [--pwm GPIO] [--tach GPIO]\n"
                 "                   — Update fan\n"
                 "  fans enable <id>                     — Enable a fan\n"
@@ -1708,8 +1716,10 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
             ),
             "schedules": (
                 "schedules list                         — List all schedules\n"
-                "  schedules create --fan N --duty N --start N --end N  — Create\n"
-                "  schedules update <id> [--fan N] [--duty N] ...  — Update\n"
+                "  schedules create --fan N --duty N --start N --end N [--name NAME]\n"
+                "                  — Create schedule\n"
+                "  schedules update <id> [--name NAME] [--fan N] [--duty N] ...\n"
+                "                   — Update schedule\n"
                 "  schedules delete <id>                — Delete schedule"
             ),
             "wifi": (

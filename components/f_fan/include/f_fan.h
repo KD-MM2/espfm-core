@@ -36,6 +36,7 @@ esp_err_t f_fan_init(f_fan_handle_t *handle, f_ledc_handle_t ledc, f_pcnt_handle
 esp_err_t f_fan_add(f_fan_handle_t handle, uint8_t pwm_gpio, uint8_t tach_gpio, const char *name,
                     uint8_t *id_out);
 esp_err_t f_fan_remove(f_fan_handle_t handle, uint8_t id);
+esp_err_t f_fan_set_name(f_fan_handle_t handle, uint8_t id, const char *name);
 esp_err_t f_fan_set_duty(f_fan_handle_t handle, uint8_t id, uint8_t duty);
 esp_err_t f_fan_set_mode(f_fan_handle_t handle, uint8_t id, fan_mode_t mode);
 esp_err_t f_fan_set_source(f_fan_handle_t handle, uint8_t id, uint8_t source_id);

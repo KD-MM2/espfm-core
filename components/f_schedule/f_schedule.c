@@ -129,6 +129,8 @@ esp_err_t f_schedule_update(f_schedule_handle_t handle, uint8_t id, const f_sche
     handle->rules[id].start_min = info->start_min;
     handle->rules[id].end_min   = info->end_min;
     handle->rules[id].enabled   = info->enabled;
+    strncpy(handle->rules[id].name, info->name, ESPFM_NAME_MAX - 1);
+    handle->rules[id].name[ESPFM_NAME_MAX - 1] = '\0';
     return ESP_OK;
 }
 

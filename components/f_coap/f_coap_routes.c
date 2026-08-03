@@ -158,6 +158,7 @@ static void handle_fan_put(coap_resource_t *resource, coap_session_t *session,
         coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;
     }
+    if (ur.has_name) f_fan_set_name(h->fan, (uint8_t)id, ur.name);
     if (ur.has_mode) f_fan_set_mode(h->fan, (uint8_t)id, (fan_mode_t)ur.mode);
     if (ur.has_duty) f_fan_set_duty(h->fan, (uint8_t)id, (uint8_t)ur.duty);
     if (ur.has_source_id) f_fan_set_source(h->fan, (uint8_t)id, (uint8_t)ur.source_id);
@@ -534,12 +535,29 @@ static void handle_curve_put(coap_resource_t *resource, coap_session_t *session,
     }
     f_curve_info_t ci = {0};
     ci.id             = (uint8_t)id;
-    strncpy(ci.name, ur.name, sizeof(ci.name) - 1);
-    ci.name[sizeof(ci.name) - 1] = '\0';
-    ci.num_points                = (uint8_t)ur.points_count;
-    for (int i = 0; i < ur.points_count && i < F_CURVE_MAX_POINTS; i++) {
-        ci.points[i].temp_c = ur.points[i].temp_c;
-        ci.points[i].duty   = (uint8_t)ur.points[i].duty;
+    /* Name: use existing if not provided in request */
+    if (ur.name[0] != '\0') {
+        strncpy(ci.name, ur.name, sizeof(ci.name) - 1);
+        ci.name[sizeof(ci.name) - 1] = '\0';
+    } else {
+        f_curve_info_t existing;
+        if (f_curve_get_info(h->curve, (uint8_t)id, &existing) == ESP_OK) {
+            memcpy(ci.name, existing.name, sizeof(ci.name));
+        }
+    }
+    /* Points: preserve existing if not provided in request */
+    if (ur.points_count > 0) {
+        ci.num_points = (uint8_t)ur.points_count;
+        for (int i = 0; i < ur.points_count && i < F_CURVE_MAX_POINTS; i++) {
+            ci.points[i].temp_c = ur.points[i].temp_c;
+            ci.points[i].duty   = (uint8_t)ur.points[i].duty;
+        }
+    } else {
+        f_curve_info_t existing;
+        if (f_curve_get_info(h->curve, (uint8_t)id, &existing) == ESP_OK) {
+            ci.num_points = existing.num_points;
+            memcpy(ci.points, existing.points, sizeof(ci.points));
+        }
     }
     uint8_t oid;
     if (f_curve_upsert(h->curve, &ci, &oid) != ESP_OK) {
@@ -625,6 +643,8 @@ static void handle_schedule_post(coap_resource_t *resource, coap_session_t *sess
                             .start_min = (uint16_t)cr.start_min,
                             .end_min   = (uint16_t)cr.end_min,
                             .enabled   = cr.enabled};
+    strncpy(si.name, cr.name, ESPFM_NAME_MAX - 1);
+    si.name[ESPFM_NAME_MAX - 1] = '\0';
     uint8_t nid;
     if (f_schedule_add(h->schedule, &si, &nid) != ESP_OK) {
         coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
@@ -664,6 +684,10 @@ static void handle_schedule_put(coap_resource_t *resource, coap_session_t *sessi
     if (ur.has_start_min) si.start_min = (uint16_t)ur.start_min;
     if (ur.has_end_min) si.end_min = (uint16_t)ur.end_min;
     if (ur.has_enabled) si.enabled = ur.enabled;
+    if (ur.has_name) {
+        strncpy(si.name, ur.name, ESPFM_NAME_MAX - 1);
+        si.name[ESPFM_NAME_MAX - 1] = '\0';
+    }
     if (f_schedule_update(h->schedule, (uint8_t)id, &si) != ESP_OK) {
         coap_pdu_set_code(resp, COAP_RESPONSE_CODE_NOT_FOUND);
         return;

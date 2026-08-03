@@ -16,6 +16,8 @@
     .\tools\build_shell.ps1 -Clean
 #>
 
+& 'C:\Espressif\tools\Microsoft.v6.0.1.PowerShell_profile.ps1';
+
 param(
     [switch]$Clean
 )

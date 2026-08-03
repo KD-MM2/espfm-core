@@ -126,6 +126,26 @@ cleanup:
     return ret;
 }
 
+esp_err_t f_fan_set_name(f_fan_handle_t handle, uint8_t id, const char *name)
+{
+    if (handle == NULL || id >= F_FAN_MAX_COUNT || name == NULL) return ESP_ERR_INVALID_ARG;
+
+    esp_err_t ret = ESP_OK;
+    xSemaphoreTakeRecursive(handle->mutex, portMAX_DELAY);
+
+    if (!handle->slot_used[id]) {
+        ret = ESP_ERR_NOT_FOUND;
+        goto cleanup;
+    }
+
+    strncpy(handle->channels[id].name, name, ESPFM_NAME_MAX - 1);
+    handle->channels[id].name[ESPFM_NAME_MAX - 1] = '\0';
+
+cleanup:
+    xSemaphoreGiveRecursive(handle->mutex);
+    return ret;
+}
+
 esp_err_t f_fan_set_duty(f_fan_handle_t handle, uint8_t id, uint8_t duty)
 {
     if (handle == NULL || id >= F_FAN_MAX_COUNT) return ESP_ERR_INVALID_ARG;

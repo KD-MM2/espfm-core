@@ -72,7 +72,7 @@ PB_BIND(CurveCreateRequest, CurveCreateRequest, AUTO)
 PB_BIND(CurveUpdateRequest, CurveUpdateRequest, AUTO)
 
 
-PB_BIND(ScheduleList, ScheduleList, AUTO)
+PB_BIND(ScheduleList, ScheduleList, 2)
 
 
 PB_BIND(ScheduleCreateRequest, ScheduleCreateRequest, AUTO)

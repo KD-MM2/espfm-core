@@ -80,6 +80,7 @@ typedef struct _ScheduleInfo {
     uint32_t start_min; /* 0-1439 minutes since midnight */
     uint32_t end_min;
     bool enabled;
+    char name[16]; /* optional display name */
 } ScheduleInfo;
 
 typedef struct _WifiApRecord {
@@ -139,6 +140,8 @@ typedef struct _FanUpdateRequest {
     uint32_t pwm_gpio; /* NEW */
     bool has_tach_gpio;
     uint32_t tach_gpio; /* NEW (255=none) */
+    bool has_name;
+    char name[16]; /* rename fan */
 } FanUpdateRequest;
 
 typedef struct _FanId {
@@ -211,6 +214,7 @@ typedef struct _ScheduleCreateRequest {
     uint32_t start_min;
     uint32_t end_min;
     bool enabled;
+    char name[16]; /* optional display name */
 } ScheduleCreateRequest;
 
 typedef struct _ScheduleUpdateRequest {
@@ -225,6 +229,8 @@ typedef struct _ScheduleUpdateRequest {
     uint32_t end_min;
     bool has_enabled;
     bool enabled;
+    bool has_name;
+    char name[16]; /* rename schedule */
 } ScheduleUpdateRequest;
 
 typedef struct _WifiScanResult {
@@ -328,13 +334,13 @@ extern "C" {
 #define SourceInfo_init_default                  {0, "", _SourceType_MIN, _SourceStatus_MIN, 0, 0, 0}
 #define CurvePoint_init_default                  {0, 0}
 #define CurveInfo_init_default                   {0, "", 0, {CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default}}
-#define ScheduleInfo_init_default                {0, 0, 0, 0, 0, 0}
+#define ScheduleInfo_init_default                {0, 0, 0, 0, 0, 0, ""}
 #define WifiApRecord_init_default                {"", 0, 0, 0}
 #define SystemInfo_init_default                  {"", 0, 0, 0, 0, 0, 0, ""}
 #define WifiStatus_init_default                  {0, "", ""}
 #define FanList_init_default                     {0, {FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default}}
 #define FanCreateRequest_init_default            {0, 0, ""}
-#define FanUpdateRequest_init_default            {0, false, _FanMode_MIN, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define FanUpdateRequest_init_default            {0, false, _FanMode_MIN, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, ""}
 #define FanId_init_default                       {0}
 #define SourceList_init_default                  {0, {SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default}}
 #define SourceCreateRequest_init_default         {_SourceType_MIN, "", 0, 0}
@@ -347,8 +353,8 @@ extern "C" {
 #define CurveCreateRequest_init_default          {"", 0, {CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default}}
 #define CurveUpdateRequest_init_default          {0, "", 0, {CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default, CurvePoint_init_default}}
 #define ScheduleList_init_default                {0, {ScheduleInfo_init_default, ScheduleInfo_init_default, ScheduleInfo_init_default, ScheduleInfo_init_default, ScheduleInfo_init_default, ScheduleInfo_init_default, ScheduleInfo_init_default, ScheduleInfo_init_default}}
-#define ScheduleCreateRequest_init_default       {0, 0, 0, 0, 0}
-#define ScheduleUpdateRequest_init_default       {0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define ScheduleCreateRequest_init_default       {0, 0, 0, 0, 0, ""}
+#define ScheduleUpdateRequest_init_default       {0, false, 0, false, 0, false, 0, false, 0, false, 0, false, ""}
 #define WifiScanResult_init_default              {0, {WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default, WifiApRecord_init_default}}
 #define WifiConnectRequest_init_default          {"", ""}
 #define HostnameRequest_init_default             {""}
@@ -359,13 +365,13 @@ extern "C" {
 #define SourceInfo_init_zero                     {0, "", _SourceType_MIN, _SourceStatus_MIN, 0, 0, 0}
 #define CurvePoint_init_zero                     {0, 0}
 #define CurveInfo_init_zero                      {0, "", 0, {CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero}}
-#define ScheduleInfo_init_zero                   {0, 0, 0, 0, 0, 0}
+#define ScheduleInfo_init_zero                   {0, 0, 0, 0, 0, 0, ""}
 #define WifiApRecord_init_zero                   {"", 0, 0, 0}
 #define SystemInfo_init_zero                     {"", 0, 0, 0, 0, 0, 0, ""}
 #define WifiStatus_init_zero                     {0, "", ""}
 #define FanList_init_zero                        {0, {FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero}}
 #define FanCreateRequest_init_zero               {0, 0, ""}
-#define FanUpdateRequest_init_zero               {0, false, _FanMode_MIN, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define FanUpdateRequest_init_zero               {0, false, _FanMode_MIN, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, ""}
 #define FanId_init_zero                          {0}
 #define SourceList_init_zero                     {0, {SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero}}
 #define SourceCreateRequest_init_zero            {_SourceType_MIN, "", 0, 0}
@@ -378,8 +384,8 @@ extern "C" {
 #define CurveCreateRequest_init_zero             {"", 0, {CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero}}
 #define CurveUpdateRequest_init_zero             {0, "", 0, {CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero, CurvePoint_init_zero}}
 #define ScheduleList_init_zero                   {0, {ScheduleInfo_init_zero, ScheduleInfo_init_zero, ScheduleInfo_init_zero, ScheduleInfo_init_zero, ScheduleInfo_init_zero, ScheduleInfo_init_zero, ScheduleInfo_init_zero, ScheduleInfo_init_zero}}
-#define ScheduleCreateRequest_init_zero          {0, 0, 0, 0, 0}
-#define ScheduleUpdateRequest_init_zero          {0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define ScheduleCreateRequest_init_zero          {0, 0, 0, 0, 0, ""}
+#define ScheduleUpdateRequest_init_zero          {0, false, 0, false, 0, false, 0, false, 0, false, 0, false, ""}
 #define WifiScanResult_init_zero                 {0, {WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero, WifiApRecord_init_zero}}
 #define WifiConnectRequest_init_zero             {"", ""}
 #define HostnameRequest_init_zero                {""}
@@ -420,6 +426,7 @@ extern "C" {
 #define ScheduleInfo_start_min_tag               4
 #define ScheduleInfo_end_min_tag                 5
 #define ScheduleInfo_enabled_tag                 6
+#define ScheduleInfo_name_tag                    7
 #define WifiApRecord_ssid_tag                    1
 #define WifiApRecord_rssi_tag                    2
 #define WifiApRecord_channel_tag                 3
@@ -450,6 +457,7 @@ extern "C" {
 #define FanUpdateRequest_enabled_tag             9
 #define FanUpdateRequest_pwm_gpio_tag            10
 #define FanUpdateRequest_tach_gpio_tag           11
+#define FanUpdateRequest_name_tag                12
 #define FanId_id_tag                             1
 #define SourceList_sources_tag                   1
 #define SourceCreateRequest_type_tag             1
@@ -478,12 +486,14 @@ extern "C" {
 #define ScheduleCreateRequest_start_min_tag      3
 #define ScheduleCreateRequest_end_min_tag        4
 #define ScheduleCreateRequest_enabled_tag        5
+#define ScheduleCreateRequest_name_tag           6
 #define ScheduleUpdateRequest_id_tag             1
 #define ScheduleUpdateRequest_fan_id_tag         2
 #define ScheduleUpdateRequest_duty_tag           3
 #define ScheduleUpdateRequest_start_min_tag      4
 #define ScheduleUpdateRequest_end_min_tag        5
 #define ScheduleUpdateRequest_enabled_tag        6
+#define ScheduleUpdateRequest_name_tag           7
 #define WifiScanResult_aps_tag                   1
 #define WifiConnectRequest_ssid_tag              1
 #define WifiConnectRequest_password_tag          2
@@ -547,7 +557,8 @@ X(a, STATIC,   SINGULAR, UINT32,   fan_id,            2) \
 X(a, STATIC,   SINGULAR, UINT32,   duty,              3) \
 X(a, STATIC,   SINGULAR, UINT32,   start_min,         4) \
 X(a, STATIC,   SINGULAR, UINT32,   end_min,           5) \
-X(a, STATIC,   SINGULAR, BOOL,     enabled,           6)
+X(a, STATIC,   SINGULAR, BOOL,     enabled,           6) \
+X(a, STATIC,   SINGULAR, STRING,   name,              7)
 #define ScheduleInfo_CALLBACK NULL
 #define ScheduleInfo_DEFAULT NULL
 
@@ -602,7 +613,8 @@ X(a, STATIC,   OPTIONAL, UINT32,   group_id,          7) \
 X(a, STATIC,   OPTIONAL, BOOL,     inverted,          8) \
 X(a, STATIC,   OPTIONAL, BOOL,     enabled,           9) \
 X(a, STATIC,   OPTIONAL, UINT32,   pwm_gpio,         10) \
-X(a, STATIC,   OPTIONAL, UINT32,   tach_gpio,        11)
+X(a, STATIC,   OPTIONAL, UINT32,   tach_gpio,        11) \
+X(a, STATIC,   OPTIONAL, STRING,   name,             12)
 #define FanUpdateRequest_CALLBACK NULL
 #define FanUpdateRequest_DEFAULT NULL
 
@@ -688,7 +700,8 @@ X(a, STATIC,   SINGULAR, UINT32,   fan_id,            1) \
 X(a, STATIC,   SINGULAR, UINT32,   duty,              2) \
 X(a, STATIC,   SINGULAR, UINT32,   start_min,         3) \
 X(a, STATIC,   SINGULAR, UINT32,   end_min,           4) \
-X(a, STATIC,   SINGULAR, BOOL,     enabled,           5)
+X(a, STATIC,   SINGULAR, BOOL,     enabled,           5) \
+X(a, STATIC,   SINGULAR, STRING,   name,              6)
 #define ScheduleCreateRequest_CALLBACK NULL
 #define ScheduleCreateRequest_DEFAULT NULL
 
@@ -698,7 +711,8 @@ X(a, STATIC,   OPTIONAL, UINT32,   fan_id,            2) \
 X(a, STATIC,   OPTIONAL, UINT32,   duty,              3) \
 X(a, STATIC,   OPTIONAL, UINT32,   start_min,         4) \
 X(a, STATIC,   OPTIONAL, UINT32,   end_min,           5) \
-X(a, STATIC,   OPTIONAL, BOOL,     enabled,           6)
+X(a, STATIC,   OPTIONAL, BOOL,     enabled,           6) \
+X(a, STATIC,   OPTIONAL, STRING,   name,              7)
 #define ScheduleUpdateRequest_CALLBACK NULL
 #define ScheduleUpdateRequest_DEFAULT NULL
 
@@ -811,7 +825,7 @@ extern const pb_msgdesc_t StatusResponse_msg;
 
 /* Maximum encoded size of messages (where known) */
 /* Ds18b20ScanResponse_size depends on runtime parameters */
-#define ConfigFile_size                          3845
+#define ConfigFile_size                          3981
 #define CurveCreateRequest_size                  147
 #define CurveInfo_size                           153
 #define CurveList_size                           2496
@@ -825,13 +839,13 @@ extern const pb_msgdesc_t StatusResponse_msg;
 #define FanId_size                               6
 #define FanInfo_size                             79
 #define FanList_size                             648
-#define FanUpdateRequest_size                    54
+#define FanUpdateRequest_size                    71
 #define HostnameRequest_size                     65
 #define ManualTempRequest_size                   11
-#define ScheduleCreateRequest_size               26
-#define ScheduleInfo_size                        32
-#define ScheduleList_size                        272
-#define ScheduleUpdateRequest_size               32
+#define ScheduleCreateRequest_size               43
+#define ScheduleInfo_size                        49
+#define ScheduleList_size                        408
+#define ScheduleUpdateRequest_size               49
 #define SourceCreateRequest_size                 36
 #define SourceInfo_size                          49
 #define SourceList_size                          408

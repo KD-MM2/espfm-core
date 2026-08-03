@@ -75,6 +75,7 @@ message ScheduleInfo {
     uint32 start_min  = 4;   // 0-1439 minutes since midnight
     uint32 end_min    = 5;
     bool enabled      = 6;
+    string name       = 7;   // optional display name
 }
 
 message WifiApRecord {
@@ -123,6 +124,7 @@ message FanUpdateRequest {
     optional bool enabled       = 9;
     optional uint32 pwm_gpio    = 10;  // NEW
     optional uint32 tach_gpio   = 11;  // NEW (255=none)
+    optional string name        = 12;  // rename fan
 }
 
 message FanId { uint32 id = 1; }
@@ -188,6 +190,7 @@ message ScheduleCreateRequest {
     uint32 start_min = 3;
     uint32 end_min   = 4;
     bool enabled     = 5;
+    string name      = 6;    // optional display name
 }
 
 message ScheduleUpdateRequest {
@@ -197,6 +200,7 @@ message ScheduleUpdateRequest {
     optional uint32 start_min = 4;
     optional uint32 end_min   = 5;
     optional bool enabled     = 6;
+    optional string name      = 7;    // rename schedule
 }
 
 // ===== WiFi =====

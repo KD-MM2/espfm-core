@@ -298,6 +298,8 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan, f_sour
                                     .start_min = (uint16_t)pb->start_min,
                                     .end_min   = (uint16_t)pb->end_min,
                                     .enabled   = pb->enabled};
+            strncpy(si.name, pb->name, ESPFM_NAME_MAX - 1);
+            si.name[ESPFM_NAME_MAX - 1] = '\0';
             uint8_t out_id;
             if (f_schedule_add(schedule, &si, &out_id) == ESP_OK) sched_count++;
         }

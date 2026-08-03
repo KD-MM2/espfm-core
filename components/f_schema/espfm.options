@@ -7,6 +7,10 @@ SourceCreateRequest.name  max_size:16
 SourceUpdateRequest.name  max_size:16
 CurveCreateRequest.name   max_size:16
 CurveUpdateRequest.name   max_size:16
+FanUpdateRequest.name     max_size:16
+ScheduleInfo.name         max_size:16
+ScheduleCreateRequest.name max_size:16
+ScheduleUpdateRequest.name max_size:16
 WifiConnectRequest.ssid      max_size:33
 WifiConnectRequest.password  max_size:64
 StatusResponse.error_msg     max_size:64

@@ -18,6 +18,7 @@ typedef struct {
     uint16_t end_min;
     uint8_t duty;
     bool enabled;
+    char name[ESPFM_NAME_MAX];
 } f_schedule_info_t;
 
 typedef struct f_schedule *f_schedule_handle_t;
