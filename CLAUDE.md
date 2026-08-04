@@ -176,7 +176,7 @@ Get-ChildItem -Path components, main -Recurse -Include *.c, *.h |
 | `f_pcnt`        | Pulse counter (fan tachometer)                                 |
 | `f_adc`         | ADC driver with ESP-IDF calibration (curve/line fitting)       |
 | `f_ds18b20`     | 1-Wire temperature sensor driver (ROM-code identity, batch conversion) |
-| `f_gpio`        | GPIO pin registry (compile-time ESP32/S3 reserved pin tables)  |
+| `f_gpio`        | GPIO claim registry — claim/release pins by capability (PWM/TACH/ADC/ONEWIRE), rejects cross-peripheral conflicts and reserved pins |
 
 ### Key Files
 
@@ -184,7 +184,7 @@ Get-ChildItem -Path components, main -Recurse -Include *.c, *.h |
 | --------------------------------------- | --------------------------------------------------------------------------------- |
 | `main/main.c`                           | Boot sequence: NVS → GPIO → drivers → registries → config → control → WiFi → CoAP |
 | `components/f_coap/f_coap.c`            | CoAP server lifecycle (start/stop/restart), `coap_task`                           |
-| `components/f_coap/f_coap_routes.c`     | All 22+ CoAP route handlers                                                       |
+| `components/f_coap/f_coap_routes.c`     | All 25 CoAP route handlers                                                       |
 | `components/f_coap/f_coap_internal.h`   | `struct f_coap` definition, internal declarations                                 |
 | `components/f_schema/proto/espfm.proto` | Protobuf schema (all request/response messages)                                   |
 | `components/f_schema/espfm.pb.h`        | Generated nanopb header (do not edit manually)                                    |
@@ -204,6 +204,7 @@ Get-ChildItem -Path components, main -Recurse -Include *.c, *.h |
 | `curves/{0..MAX_CURVE-1}`    | GET, PUT, DELETE  | Get/update/delete curve by ID        |
 | `schedules`                  | GET, POST         | List schedules, create schedule      |
 | `schedules/{0..MAX_SCHED-1}` | GET, PUT, DELETE  | Get/update/delete schedule by ID     |
+| `config`           | GET, POST         | Export/import all config as `ConfigFile` protobuf |
 | `system/info`      | GET               | Version, uptime, heap, entity counts |
 | `system/hostname`  | PUT               | Set device hostname                  |
 | `system/reboot`    | POST              | Reboot device (2s delay)             |
