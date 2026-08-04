@@ -3,6 +3,7 @@
 #include "f_core.h"
 #include "f_adc.h"
 #include "f_ds18b20.h"
+#include "f_gpio.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -26,9 +27,9 @@ typedef struct {
 typedef struct f_source *f_source_handle_t;
 
 esp_err_t f_source_init(f_source_handle_t *handle, f_adc_handle_t adc,
-                        f_ds18b20_handle_t *ds18b20_ref);
+                        f_ds18b20_handle_t *ds18b20_ref, f_gpio_handle_t gpio);
 esp_err_t f_source_add(f_source_handle_t handle, source_type_t type, uint8_t gpio, const char *name,
-                       uint8_t *id_out);
+                       uint8_t *id_out, const char **err_msg);
 esp_err_t f_source_remove(f_source_handle_t handle, uint8_t id);
 esp_err_t f_source_get_reading(f_source_handle_t handle, uint8_t id, float *temp_c_out,
                                source_status_t *status_out);

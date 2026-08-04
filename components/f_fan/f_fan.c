@@ -5,12 +5,44 @@
 #include "freertos/semphr.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 static const char *TAG = "f_fan";
+
+/* File-local buffer backing claim-error messages. Written by f_fan_set_claim_err
+   and read by the caller before the next claim failure can overwrite it. */
+static char s_fan_err_buf[64];
+
+static const char *f_fan_caps_label(uint32_t caps)
+{
+    if (caps == F_GPIO_CAP_PWM) return "PWM";
+    if (caps == F_GPIO_CAP_TACH) return "TACH";
+    if (caps == F_GPIO_CAP_ADC) return "ADC";
+    if (caps == F_GPIO_CAP_ONEWIRE) return "ONEWIRE";
+    return "peripheral";
+}
+
+/* Set *err_msg to a human-readable description of why pin could not be claimed:
+   out-of-range, reserved by the chip pin table, or already in use by another
+   peripheral. No-op when err_msg is NULL. */
+static void f_fan_set_claim_err(const char **err_msg, f_gpio_handle_t gpio, uint8_t pin)
+{
+    if (err_msg == NULL) return;
+    if (pin >= F_GPIO_MAX_PINS) {
+        snprintf(s_fan_err_buf, sizeof(s_fan_err_buf), "GPIO %d is out of range", pin);
+    } else if (f_gpio_get_caps(gpio, pin) == 0xFFFFFFFF) {
+        snprintf(s_fan_err_buf, sizeof(s_fan_err_buf), "GPIO %d is reserved", pin);
+    } else {
+        snprintf(s_fan_err_buf, sizeof(s_fan_err_buf), "GPIO %d already in use by %s", pin,
+                 f_fan_caps_label(f_gpio_get_caps(gpio, pin)));
+    }
+    *err_msg = s_fan_err_buf;
+}
 
 struct f_fan {
     f_ledc_handle_t ledc;
     f_pcnt_handle_t pcnt;
+    f_gpio_handle_t gpio;
     f_fan_info_t channels[F_FAN_MAX_COUNT];
     bool slot_used[F_FAN_MAX_COUNT];
     uint8_t ledc_channel_id[F_FAN_MAX_COUNT];
@@ -19,13 +51,15 @@ struct f_fan {
     SemaphoreHandle_t mutex;
 };
 
-esp_err_t f_fan_init(f_fan_handle_t *handle, f_ledc_handle_t ledc, f_pcnt_handle_t pcnt)
+esp_err_t f_fan_init(f_fan_handle_t *handle, f_ledc_handle_t ledc, f_pcnt_handle_t pcnt,
+                     f_gpio_handle_t gpio)
 {
     if (handle == NULL || ledc == NULL) return ESP_ERR_INVALID_ARG;
     f_fan_handle_t h = calloc(1, sizeof(struct f_fan));
     if (h == NULL) return ESP_ERR_NO_MEM;
     h->ledc  = ledc;
     h->pcnt  = pcnt;
+    h->gpio  = gpio;
     h->mutex = xSemaphoreCreateRecursiveMutex();
     if (h->mutex == NULL) {
         free(h);
@@ -37,11 +71,12 @@ esp_err_t f_fan_init(f_fan_handle_t *handle, f_ledc_handle_t ledc, f_pcnt_handle
 }
 
 esp_err_t f_fan_add(f_fan_handle_t handle, uint8_t pwm_gpio, uint8_t tach_gpio, const char *name,
-                    uint8_t *id_out)
+                    uint8_t *id_out, const char **err_msg)
 {
+    if (err_msg != NULL) *err_msg = NULL;
     if (handle == NULL || name == NULL || id_out == NULL) return ESP_ERR_INVALID_ARG;
-    if (f_constraints_gpio((int)pwm_gpio, NULL) != ESP_OK) return ESP_ERR_INVALID_ARG;
-    if (tach_gpio != F_FAN_TACH_NONE && f_constraints_gpio((int)tach_gpio, NULL) != ESP_OK)
+    if (f_constraints_gpio((int)pwm_gpio, err_msg) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    if (tach_gpio != F_FAN_TACH_NONE && f_constraints_gpio((int)tach_gpio, err_msg) != ESP_OK)
         return ESP_ERR_INVALID_ARG;
 
     esp_err_t ret = ESP_OK;
@@ -57,6 +92,24 @@ esp_err_t f_fan_add(f_fan_handle_t handle, uint8_t pwm_gpio, uint8_t tach_gpio, 
     if (slot < 0) {
         ret = ESP_ERR_NO_MEM;
         goto cleanup;
+    }
+
+    /* Claim GPIO pins before any LEDC/PCNT allocation so a conflict or reserved
+       pin aborts the add with no fan created and no pin left claimed. */
+    esp_err_t err = f_gpio_claim(handle->gpio, pwm_gpio, F_GPIO_CAP_PWM);
+    if (err != ESP_OK) {
+        f_fan_set_claim_err(err_msg, handle->gpio, pwm_gpio);
+        ret = err;
+        goto cleanup;
+    }
+    if (tach_gpio != F_FAN_TACH_NONE) {
+        err = f_gpio_claim(handle->gpio, tach_gpio, F_GPIO_CAP_TACH);
+        if (err != ESP_OK) {
+            f_fan_set_claim_err(err_msg, handle->gpio, tach_gpio);
+            f_gpio_release(handle->gpio, pwm_gpio);
+            ret = err;
+            goto cleanup;
+        }
     }
 
     uint8_t ledc_ch;
@@ -113,6 +166,13 @@ esp_err_t f_fan_remove(f_fan_handle_t handle, uint8_t id)
     f_ledc_remove_channel(handle->ledc, handle->ledc_channel_id[id]);
     if (handle->pcnt_unit_id[id] != 0xFF && handle->pcnt != NULL) {
         f_pcnt_remove_input(handle->pcnt, handle->pcnt_unit_id[id]);
+    }
+
+    /* Release GPIO claims after hardware teardown; release is a safe no-op for
+       never-claimed pins. */
+    f_gpio_release(handle->gpio, handle->channels[id].pwm_gpio);
+    if (handle->channels[id].tach_gpio != F_FAN_TACH_NONE) {
+        f_gpio_release(handle->gpio, handle->channels[id].tach_gpio);
     }
 
     memset(&handle->channels[id], 0, sizeof(f_fan_info_t));
@@ -323,12 +383,30 @@ cleanup:
     return ret;
 }
 
-esp_err_t f_fan_set_gpio(f_fan_handle_t handle, uint8_t id, uint8_t new_pwm_gpio,
-                         uint8_t new_tach_gpio)
+/* Pre-validate a candidate pin for f_fan_set_gpio without mutating state.
+   Returns ESP_ERR_INVALID_ARG for pins beyond the chip pin table or reserved by
+   the chip, ESP_ERR_INVALID_STATE for a pin claimed by another peripheral, and
+   ESP_OK otherwise. A pin already owned by this fan (old_pwm/old_tach) passes. */
+static esp_err_t f_fan_validate_new_gpio(f_gpio_handle_t gpio, uint8_t pin, uint8_t old_pwm,
+                                         uint8_t old_tach)
 {
+    if (pin >= F_GPIO_MAX_PINS) return ESP_ERR_INVALID_ARG;
+    uint32_t caps = f_gpio_get_caps(gpio, pin);
+    if (caps == 0xFFFFFFFF) return ESP_ERR_INVALID_ARG; /* reserved by chip pin table */
+    if (caps != 0 && pin != old_pwm && pin != old_tach) {
+        return ESP_ERR_INVALID_STATE; /* claimed by another peripheral */
+    }
+    return ESP_OK;
+}
+
+esp_err_t f_fan_set_gpio(f_fan_handle_t handle, uint8_t id, uint8_t new_pwm_gpio,
+                         uint8_t new_tach_gpio, const char **err_msg)
+{
+    if (err_msg != NULL) *err_msg = NULL;
     if (handle == NULL || id >= F_FAN_MAX_COUNT) return ESP_ERR_INVALID_ARG;
-    if (f_constraints_gpio((int)new_pwm_gpio, NULL) != ESP_OK) return ESP_ERR_INVALID_ARG;
-    if (new_tach_gpio != F_FAN_TACH_NONE && f_constraints_gpio((int)new_tach_gpio, NULL) != ESP_OK)
+    if (f_constraints_gpio((int)new_pwm_gpio, err_msg) != ESP_OK) return ESP_ERR_INVALID_ARG;
+    if (new_tach_gpio != F_FAN_TACH_NONE &&
+        f_constraints_gpio((int)new_tach_gpio, err_msg) != ESP_OK)
         return ESP_ERR_INVALID_ARG;
 
     esp_err_t ret = ESP_OK;
@@ -339,10 +417,42 @@ esp_err_t f_fan_set_gpio(f_fan_handle_t handle, uint8_t id, uint8_t new_pwm_gpio
         goto cleanup;
     }
 
-    /* Remove old hardware resources */
+    uint8_t old_pwm  = handle->channels[id].pwm_gpio;
+    uint8_t old_tach = handle->channels[id].tach_gpio;
+
+    /* Pre-validate both new pins before any teardown so a pin conflict leaves
+       the fan and its claims fully intact. */
+    if (new_tach_gpio != F_FAN_TACH_NONE && new_pwm_gpio == new_tach_gpio) {
+        if (err_msg) *err_msg = "pwm and tach cannot use the same GPIO";
+        ret = ESP_ERR_INVALID_ARG;
+        goto cleanup;
+    }
+    esp_err_t err = f_fan_validate_new_gpio(handle->gpio, new_pwm_gpio, old_pwm, old_tach);
+    if (err != ESP_OK) {
+        f_fan_set_claim_err(err_msg, handle->gpio, new_pwm_gpio);
+        ret = err;
+        goto cleanup;
+    }
+    if (new_tach_gpio != F_FAN_TACH_NONE) {
+        err = f_fan_validate_new_gpio(handle->gpio, new_tach_gpio, old_pwm, old_tach);
+        if (err != ESP_OK) {
+            f_fan_set_claim_err(err_msg, handle->gpio, new_tach_gpio);
+            ret = err;
+            goto cleanup;
+        }
+    }
+
+    /* Teardown old hardware resources */
     f_ledc_remove_channel(handle->ledc, handle->ledc_channel_id[id]);
     if (handle->pcnt_unit_id[id] != 0xFF && handle->pcnt != NULL) {
         f_pcnt_remove_input(handle->pcnt, handle->pcnt_unit_id[id]);
+    }
+
+    /* Release old claims before claiming the new ones; makes new==old and full
+       swap safe without double-claiming. */
+    f_gpio_release(handle->gpio, old_pwm);
+    if (old_tach != F_FAN_TACH_NONE) {
+        f_gpio_release(handle->gpio, old_tach);
     }
 
     /* Allocate new LEDC channel on new PWM GPIO */
@@ -353,6 +463,24 @@ esp_err_t f_fan_set_gpio(f_fan_handle_t handle, uint8_t id, uint8_t new_pwm_gpio
     uint8_t pcnt_unit = 0xFF;
     if (new_tach_gpio != F_FAN_TACH_NONE && handle->pcnt != NULL) {
         ESP_ERROR_CHECK(f_pcnt_add_input(handle->pcnt, new_tach_gpio, &pcnt_unit));
+    }
+
+    /* Claim the new pins; pre-validation already confirmed availability, and
+       release of the old claims makes identity/swap re-claims safe. */
+    err = f_gpio_claim(handle->gpio, new_pwm_gpio, F_GPIO_CAP_PWM);
+    if (err != ESP_OK) {
+        f_fan_set_claim_err(err_msg, handle->gpio, new_pwm_gpio);
+        ret = err;
+        goto cleanup;
+    }
+    if (new_tach_gpio != F_FAN_TACH_NONE) {
+        err = f_gpio_claim(handle->gpio, new_tach_gpio, F_GPIO_CAP_TACH);
+        if (err != ESP_OK) {
+            f_fan_set_claim_err(err_msg, handle->gpio, new_tach_gpio);
+            f_gpio_release(handle->gpio, new_pwm_gpio);
+            ret = err;
+            goto cleanup;
+        }
     }
 
     /* Update struct fields */

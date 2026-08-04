@@ -12,6 +12,34 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 import espfm_pb2 as pb
 from espfm_shell import CoAPTransport
 
+# ============================================================
+# Host-based unit tests (no hardware required)
+# ============================================================
+import unittest
+
+
+def run_host_unit_tests():
+    loader = unittest.TestLoader()
+    suite = loader.loadTestsFromNames(
+        [
+            "test_espfm_shell",
+            "test_host_f_config",
+            "test_host_f_coap",
+            "test_host_f_gpio_claim",
+        ]
+    )
+    runner = unittest.TextTestRunner(verbosity=2)
+    return runner.run(suite)
+
+
+print(f'\n{"="*60}')
+print("HOST-BASED UNIT TESTS (no hardware)")
+print(f'{"="*60}')
+host_result = run_host_unit_tests()
+if not host_result.wasSuccessful():
+    print("\nHost-based unit tests FAILED — aborting.")
+    sys.exit(1)
+
 # CoAP method constants
 COAP_GET, COAP_POST, COAP_PUT, COAP_DELETE = 1, 2, 3, 4
 
@@ -150,6 +178,31 @@ def test(
 # ============================================================
 # Test cases
 # ============================================================
+
+# ============================================================
+# Device probe — skip integration tests when no device is reachable
+# ============================================================
+
+
+def device_reachable():
+    probe = CoAPTransport(HOST, PORT, timeout=2)
+    probe.connect()
+    try:
+        for _ in range(2):
+            code, _ = probe.request(COAP_GET, "/system/info")
+            if code is not None:
+                return True
+        return False
+    except Exception:
+        return False
+    finally:
+        probe.close()
+
+
+if not device_reachable():
+    print(f"\nNo ESPFM device reachable at {HOST}:{PORT} — skipping device integration tests.")
+    print("Host-based unit tests completed above.")
+    sys.exit(0)
 
 transport = CoAPTransport(HOST, PORT, timeout=3)
 transport.connect()

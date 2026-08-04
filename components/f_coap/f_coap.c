@@ -34,6 +34,8 @@ static void start_coap(struct f_coap *h)
             ESP_LOGE(TAG, "coap_new_context failed");
             return;
         }
+        /* libcoap-managed Block1/Block2: must run before coap_new_endpoint (session setup). */
+        coap_context_set_block_mode(h->ctx, COAP_BLOCK_USE_LIBCOAP | COAP_BLOCK_SINGLE_BODY);
         f_coap_register_resources(h->ctx, h);
     }
     coap_address_t listen_addr;
@@ -116,7 +118,7 @@ static void on_ap_stop(void *arg, esp_event_base_t base, int32_t id, void *data)
 esp_err_t f_coap_init(f_coap_handle_t *handle, f_fan_handle_t fan, f_source_handle_t source,
                       f_curve_handle_t curve, f_schedule_handle_t schedule,
                       f_config_handle_t config, f_mdns_handle_t mdns,
-                      f_ds18b20_handle_t *ds18b20_ref)
+                      f_ds18b20_handle_t *ds18b20_ref, f_gpio_handle_t gpio)
 {
     if (!handle) return ESP_ERR_INVALID_ARG;
     struct f_coap *h = calloc(1, sizeof(*h));
@@ -128,6 +130,7 @@ esp_err_t f_coap_init(f_coap_handle_t *handle, f_fan_handle_t fan, f_source_hand
     h->config      = config;
     h->mdns        = mdns;
     h->ds18b20_ref = ds18b20_ref;
+    h->gpio        = gpio;
 
     coap_startup();
 

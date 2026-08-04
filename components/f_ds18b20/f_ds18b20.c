@@ -4,6 +4,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <stdlib.h>
 #include <string.h>
 
 static const char *TAG = "f_ds18b20";
@@ -11,12 +12,13 @@ static const char *TAG = "f_ds18b20";
 struct f_ds18b20 {
     onewire_bus_handle_t bus;
     uint8_t bus_gpio;
+    f_gpio_handle_t gpio;
     ds18b20_device_handle_t devices[F_DS18B20_MAX_DEVICES];
     uint64_t rom_codes[F_DS18B20_MAX_DEVICES];
     uint8_t device_count;
 };
 
-esp_err_t f_ds18b20_init(f_ds18b20_handle_t *handle, uint8_t gpio)
+esp_err_t f_ds18b20_init(f_ds18b20_handle_t *handle, uint8_t gpio, f_gpio_handle_t gpio_registry)
 {
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
     f_ds18b20_handle_t h = calloc(1, sizeof(struct f_ds18b20));
@@ -30,6 +32,17 @@ esp_err_t f_ds18b20_init(f_ds18b20_handle_t *handle, uint8_t gpio)
     };
     ESP_ERROR_CHECK(onewire_new_bus_rmt(&bus_cfg, &rmt_cfg, &h->bus));
     h->bus_gpio = gpio;
+    h->gpio     = gpio_registry;
+
+    /* Claim the bus GPIO for 1-Wire. Claimed at most once, at bus init,
+     * never released (no f_ds18b20_deinit exists). A reserved pin (C13) or
+     * a pin already claimed by another peripheral fails init cleanly. */
+    esp_err_t err = f_gpio_claim(h->gpio, gpio, F_GPIO_CAP_ONEWIRE);
+    if (err != ESP_OK) {
+        onewire_bus_del(h->bus);
+        free(h);
+        return err;
+    }
 
     ESP_LOGI(TAG, "1-Wire bus initialized on GPIO %d", gpio);
     *handle = h;

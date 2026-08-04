@@ -99,6 +99,11 @@ PB_BIND(Empty, Empty, AUTO)
 PB_BIND(StatusResponse, StatusResponse, AUTO)
 
 
+PB_BIND(ControlConfig, ControlConfig, AUTO)
+
+
+
+
 
 
 

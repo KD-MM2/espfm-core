@@ -33,6 +33,14 @@ typedef enum _FanAlarm {
     FanAlarm_FAN_ALARM_OVERTEMP = 2
 } FanAlarm;
 
+/* Values MUST match failsafe_policy_t in f_core.h so a cast is safe. */
+typedef enum _FailsafePolicy {
+    FailsafePolicy_FAILSAFE_HOLD = 0,
+    FailsafePolicy_FAILSAFE_FULL_SPEED = 1,
+    FailsafePolicy_FAILSAFE_SAFE_DUTY = 2,
+    FailsafePolicy_FAILSAFE_ALT_SOURCE = 3
+} FailsafePolicy;
+
 /* Struct definitions */
 typedef struct _FanInfo {
     uint32_t id;
@@ -115,7 +123,24 @@ typedef struct _FanList {
 typedef struct _FanCreateRequest {
     uint32_t pwm_gpio;
     uint32_t tach_gpio; /* optional, 255=none */
-    char name[16];
+    bool has_mode;
+    FanMode mode;
+    bool has_duty;
+    uint32_t duty; /* 0-100% */
+    bool has_source_id;
+    uint32_t source_id; /* 255=none */
+    bool has_curve_id;
+    uint32_t curve_id; /* 255=none */
+    bool has_schedule_id;
+    uint32_t schedule_id; /* 255=none */
+    bool has_group_id;
+    uint32_t group_id;
+    bool has_inverted;
+    bool inverted;
+    bool has_enabled;
+    bool enabled;
+    bool has_name;
+    char name[16]; /* display name */
 } FanCreateRequest;
 
 typedef struct _FanUpdateRequest {
@@ -269,6 +294,19 @@ typedef struct _StatusResponse {
     char error_msg[64]; /* empty on success */
 } StatusResponse;
 
+typedef struct _ControlConfig {
+    bool has_hysteresis;
+    uint32_t hysteresis; /* 0-100% */
+    bool has_ramp_up;
+    uint32_t ramp_up; /* 0-100% */
+    bool has_ramp_down;
+    uint32_t ramp_down; /* 0-100% */
+    bool has_failsafe_policy;
+    FailsafePolicy failsafe_policy;
+    bool has_safe_duty;
+    uint32_t safe_duty; /* 0-100% */
+} ControlConfig;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -291,6 +329,10 @@ extern "C" {
 #define _FanAlarm_MAX FanAlarm_FAN_ALARM_OVERTEMP
 #define _FanAlarm_ARRAYSIZE ((FanAlarm)(FanAlarm_FAN_ALARM_OVERTEMP+1))
 
+#define _FailsafePolicy_MIN FailsafePolicy_FAILSAFE_HOLD
+#define _FailsafePolicy_MAX FailsafePolicy_FAILSAFE_ALT_SOURCE
+#define _FailsafePolicy_ARRAYSIZE ((FailsafePolicy)(FailsafePolicy_FAILSAFE_ALT_SOURCE+1))
+
 #define FanInfo_mode_ENUMTYPE FanMode
 #define FanInfo_alarm_ENUMTYPE FanAlarm
 
@@ -304,6 +346,7 @@ extern "C" {
 
 
 
+#define FanCreateRequest_mode_ENUMTYPE FanMode
 
 #define FanUpdateRequest_mode_ENUMTYPE FanMode
 
@@ -328,6 +371,8 @@ extern "C" {
 
 
 
+#define ControlConfig_failsafe_policy_ENUMTYPE FailsafePolicy
+
 
 /* Initializer values for message structs */
 #define FanInfo_init_default                     {0, "", _FanMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _FanAlarm_MIN}
@@ -339,7 +384,7 @@ extern "C" {
 #define SystemInfo_init_default                  {"", 0, 0, 0, 0, 0, 0, ""}
 #define WifiStatus_init_default                  {0, "", ""}
 #define FanList_init_default                     {0, {FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default, FanInfo_init_default}}
-#define FanCreateRequest_init_default            {0, 0, ""}
+#define FanCreateRequest_init_default            {0, 0, false, _FanMode_MIN, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, ""}
 #define FanUpdateRequest_init_default            {0, false, _FanMode_MIN, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, ""}
 #define FanId_init_default                       {0}
 #define SourceList_init_default                  {0, {SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default, SourceInfo_init_default}}
@@ -361,6 +406,7 @@ extern "C" {
 #define ConfigFile_init_default                  {"", false, FanList_init_default, false, SourceList_init_default, false, CurveList_init_default, false, ScheduleList_init_default}
 #define Empty_init_default                       {0}
 #define StatusResponse_init_default              {0, 0, ""}
+#define ControlConfig_init_default               {false, 0, false, 0, false, 0, false, _FailsafePolicy_MIN, false, 0}
 #define FanInfo_init_zero                        {0, "", _FanMode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _FanAlarm_MIN}
 #define SourceInfo_init_zero                     {0, "", _SourceType_MIN, _SourceStatus_MIN, 0, 0, 0}
 #define CurvePoint_init_zero                     {0, 0}
@@ -370,7 +416,7 @@ extern "C" {
 #define SystemInfo_init_zero                     {"", 0, 0, 0, 0, 0, 0, ""}
 #define WifiStatus_init_zero                     {0, "", ""}
 #define FanList_init_zero                        {0, {FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero, FanInfo_init_zero}}
-#define FanCreateRequest_init_zero               {0, 0, ""}
+#define FanCreateRequest_init_zero               {0, 0, false, _FanMode_MIN, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, ""}
 #define FanUpdateRequest_init_zero               {0, false, _FanMode_MIN, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, ""}
 #define FanId_init_zero                          {0}
 #define SourceList_init_zero                     {0, {SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero, SourceInfo_init_zero}}
@@ -392,6 +438,7 @@ extern "C" {
 #define ConfigFile_init_zero                     {"", false, FanList_init_zero, false, SourceList_init_zero, false, CurveList_init_zero, false, ScheduleList_init_zero}
 #define Empty_init_zero                          {0}
 #define StatusResponse_init_zero                 {0, 0, ""}
+#define ControlConfig_init_zero                  {false, 0, false, 0, false, 0, false, _FailsafePolicy_MIN, false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define FanInfo_id_tag                           1
@@ -445,7 +492,15 @@ extern "C" {
 #define FanList_fans_tag                         1
 #define FanCreateRequest_pwm_gpio_tag            1
 #define FanCreateRequest_tach_gpio_tag           2
-#define FanCreateRequest_name_tag                3
+#define FanCreateRequest_mode_tag                3
+#define FanCreateRequest_duty_tag                4
+#define FanCreateRequest_source_id_tag           5
+#define FanCreateRequest_curve_id_tag            6
+#define FanCreateRequest_schedule_id_tag         7
+#define FanCreateRequest_group_id_tag            8
+#define FanCreateRequest_inverted_tag            9
+#define FanCreateRequest_enabled_tag             10
+#define FanCreateRequest_name_tag                11
 #define FanUpdateRequest_id_tag                  1
 #define FanUpdateRequest_mode_tag                2
 #define FanUpdateRequest_duty_tag                3
@@ -506,6 +561,11 @@ extern "C" {
 #define StatusResponse_ok_tag                    1
 #define StatusResponse_error_code_tag            2
 #define StatusResponse_error_msg_tag             3
+#define ControlConfig_hysteresis_tag             1
+#define ControlConfig_ramp_up_tag                2
+#define ControlConfig_ramp_down_tag              3
+#define ControlConfig_failsafe_policy_tag        4
+#define ControlConfig_safe_duty_tag              5
 
 /* Struct field encoding specification for nanopb */
 #define FanInfo_FIELDLIST(X, a) \
@@ -598,7 +658,15 @@ X(a, STATIC,   REPEATED, MESSAGE,  fans,              1)
 #define FanCreateRequest_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   pwm_gpio,          1) \
 X(a, STATIC,   SINGULAR, UINT32,   tach_gpio,         2) \
-X(a, STATIC,   SINGULAR, STRING,   name,              3)
+X(a, STATIC,   OPTIONAL, UENUM,    mode,              3) \
+X(a, STATIC,   OPTIONAL, UINT32,   duty,              4) \
+X(a, STATIC,   OPTIONAL, UINT32,   source_id,         5) \
+X(a, STATIC,   OPTIONAL, UINT32,   curve_id,          6) \
+X(a, STATIC,   OPTIONAL, UINT32,   schedule_id,       7) \
+X(a, STATIC,   OPTIONAL, UINT32,   group_id,          8) \
+X(a, STATIC,   OPTIONAL, BOOL,     inverted,          9) \
+X(a, STATIC,   OPTIONAL, BOOL,     enabled,          10) \
+X(a, STATIC,   OPTIONAL, STRING,   name,             11)
 #define FanCreateRequest_CALLBACK NULL
 #define FanCreateRequest_DEFAULT NULL
 
@@ -758,6 +826,15 @@ X(a, STATIC,   SINGULAR, STRING,   error_msg,         3)
 #define StatusResponse_CALLBACK NULL
 #define StatusResponse_DEFAULT NULL
 
+#define ControlConfig_FIELDLIST(X, a) \
+X(a, STATIC,   OPTIONAL, UINT32,   hysteresis,        1) \
+X(a, STATIC,   OPTIONAL, UINT32,   ramp_up,           2) \
+X(a, STATIC,   OPTIONAL, UINT32,   ramp_down,         3) \
+X(a, STATIC,   OPTIONAL, UENUM,    failsafe_policy,   4) \
+X(a, STATIC,   OPTIONAL, UINT32,   safe_duty,         5)
+#define ControlConfig_CALLBACK NULL
+#define ControlConfig_DEFAULT NULL
+
 extern const pb_msgdesc_t FanInfo_msg;
 extern const pb_msgdesc_t SourceInfo_msg;
 extern const pb_msgdesc_t CurvePoint_msg;
@@ -789,6 +866,7 @@ extern const pb_msgdesc_t HostnameRequest_msg;
 extern const pb_msgdesc_t ConfigFile_msg;
 extern const pb_msgdesc_t Empty_msg;
 extern const pb_msgdesc_t StatusResponse_msg;
+extern const pb_msgdesc_t ControlConfig_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define FanInfo_fields &FanInfo_msg
@@ -822,10 +900,12 @@ extern const pb_msgdesc_t StatusResponse_msg;
 #define ConfigFile_fields &ConfigFile_msg
 #define Empty_fields &Empty_msg
 #define StatusResponse_fields &StatusResponse_msg
+#define ControlConfig_fields &ControlConfig_msg
 
 /* Maximum encoded size of messages (where known) */
 /* Ds18b20ScanResponse_size depends on runtime parameters */
 #define ConfigFile_size                          3981
+#define ControlConfig_size                       26
 #define CurveCreateRequest_size                  147
 #define CurveInfo_size                           153
 #define CurveList_size                           2496
@@ -835,7 +915,7 @@ extern const pb_msgdesc_t StatusResponse_msg;
 #define Ds18b20Device_size                       22
 #define ESPFM_PB_H_MAX_SIZE                      ConfigFile_size
 #define Empty_size                               0
-#define FanCreateRequest_size                    29
+#define FanCreateRequest_size                    65
 #define FanId_size                               6
 #define FanInfo_size                             79
 #define FanList_size                             648

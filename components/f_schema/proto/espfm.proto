@@ -28,6 +28,14 @@ enum FanAlarm {
     FAN_ALARM_OVERTEMP = 2;
 }
 
+// Values MUST match failsafe_policy_t in f_core.h so a cast is safe.
+enum FailsafePolicy {
+    FAILSAFE_HOLD       = 0;
+    FAILSAFE_FULL_SPEED = 1;
+    FAILSAFE_SAFE_DUTY  = 2;
+    FAILSAFE_ALT_SOURCE = 3;
+}
+
 // ===== Core Data Types =====
 
 message FanInfo {
@@ -107,9 +115,17 @@ message WifiStatus {
 message FanList { repeated FanInfo fans = 1; }
 
 message FanCreateRequest {
-    uint32 pwm_gpio  = 1;
-    uint32 tach_gpio = 2;  // optional, 255=none
-    string name      = 3;
+    uint32 pwm_gpio           = 1;
+    uint32 tach_gpio          = 2;   // optional, 255=none
+    optional FanMode mode     = 3;
+    optional uint32 duty      = 4;   // 0-100%
+    optional uint32 source_id = 5;   // 255=none
+    optional uint32 curve_id  = 6;   // 255=none
+    optional uint32 schedule_id = 7; // 255=none
+    optional uint32 group_id  = 8;
+    optional bool inverted    = 9;
+    optional bool enabled     = 10;
+    optional string name      = 11;  // display name
 }
 
 message FanUpdateRequest {
@@ -234,4 +250,14 @@ message StatusResponse {
     bool ok            = 1;
     uint32 error_code  = 2;  // 0 on success
     string error_msg   = 3;  // empty on success
+}
+
+// ===== Control =====
+
+message ControlConfig {
+    optional uint32 hysteresis     = 1;  // 0-100%
+    optional uint32 ramp_up        = 2;  // 0-100%
+    optional uint32 ramp_down      = 3;  // 0-100%
+    optional FailsafePolicy failsafe_policy = 4;
+    optional uint32 safe_duty      = 5;  // 0-100%
 }

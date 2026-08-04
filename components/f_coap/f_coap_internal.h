@@ -38,6 +38,7 @@ struct f_coap {
     f_config_handle_t config;
     f_mdns_handle_t mdns;
     f_ds18b20_handle_t *ds18b20_ref;
+    f_gpio_handle_t gpio;
 };
 
 void f_coap_register_resources(coap_context_t *ctx, struct f_coap *h);

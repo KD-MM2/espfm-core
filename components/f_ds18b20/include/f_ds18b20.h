@@ -1,5 +1,6 @@
 #pragma once
 #include "esp_err.h"
+#include "f_gpio.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -10,7 +11,7 @@ extern "C" {
 
 typedef struct f_ds18b20 *f_ds18b20_handle_t;
 
-esp_err_t f_ds18b20_init(f_ds18b20_handle_t *handle, uint8_t gpio);
+esp_err_t f_ds18b20_init(f_ds18b20_handle_t *handle, uint8_t gpio, f_gpio_handle_t gpio_registry);
 esp_err_t f_ds18b20_scan(f_ds18b20_handle_t handle, uint8_t *count_out);
 esp_err_t f_ds18b20_read_temp(f_ds18b20_handle_t handle, uint8_t index, float *temp_c_out);
 esp_err_t f_ds18b20_trigger_all(f_ds18b20_handle_t handle);

@@ -5,8 +5,39 @@
 #include "freertos/semphr.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 static const char *TAG = "f_source";
+
+/* File-local buffer backing claim-error messages. Written by f_source_set_claim_err
+   and read by the caller before the next claim failure can overwrite it. */
+static char s_source_err_buf[64];
+
+static const char *f_source_caps_label(uint32_t caps)
+{
+    if (caps == F_GPIO_CAP_PWM) return "PWM";
+    if (caps == F_GPIO_CAP_TACH) return "TACH";
+    if (caps == F_GPIO_CAP_ADC) return "ADC";
+    if (caps == F_GPIO_CAP_ONEWIRE) return "ONEWIRE";
+    return "peripheral";
+}
+
+/* Set *err_msg to a human-readable description of why pin could not be claimed:
+   out-of-range, reserved by the chip pin table, or already in use by another
+   peripheral. No-op when err_msg is NULL. */
+static void f_source_set_claim_err(const char **err_msg, f_gpio_handle_t gpio, uint8_t pin)
+{
+    if (err_msg == NULL) return;
+    if (pin >= F_GPIO_MAX_PINS) {
+        snprintf(s_source_err_buf, sizeof(s_source_err_buf), "GPIO %d is out of range", pin);
+    } else if (f_gpio_get_caps(gpio, pin) == 0xFFFFFFFF) {
+        snprintf(s_source_err_buf, sizeof(s_source_err_buf), "GPIO %d is reserved", pin);
+    } else {
+        snprintf(s_source_err_buf, sizeof(s_source_err_buf), "GPIO %d already in use by %s", pin,
+                 f_source_caps_label(f_gpio_get_caps(gpio, pin)));
+    }
+    *err_msg = s_source_err_buf;
+}
 
 /* Default NTC params for a 10k NTC with 10k divider at 3.3V */
 #define NTC_BETA             3950.0f
@@ -22,6 +53,7 @@ static const char *TAG = "f_source";
 struct f_source {
     f_adc_handle_t adc;
     f_ds18b20_handle_t *ds18b20_ref;
+    f_gpio_handle_t gpio;
     f_source_info_t sources[F_SOURCE_MAX_COUNT];
     bool slot_used[F_SOURCE_MAX_COUNT];
     uint8_t count;
@@ -29,13 +61,14 @@ struct f_source {
 };
 
 esp_err_t f_source_init(f_source_handle_t *handle, f_adc_handle_t adc,
-                        f_ds18b20_handle_t *ds18b20_ref)
+                        f_ds18b20_handle_t *ds18b20_ref, f_gpio_handle_t gpio)
 {
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
     f_source_handle_t h = calloc(1, sizeof(struct f_source));
     if (h == NULL) return ESP_ERR_NO_MEM;
     h->adc         = adc;
     h->ds18b20_ref = ds18b20_ref;
+    h->gpio        = gpio;
     h->mutex       = xSemaphoreCreateRecursiveMutex();
     if (h->mutex == NULL) {
         free(h);
@@ -47,8 +80,9 @@ esp_err_t f_source_init(f_source_handle_t *handle, f_adc_handle_t adc,
 }
 
 esp_err_t f_source_add(f_source_handle_t handle, source_type_t type, uint8_t gpio, const char *name,
-                       uint8_t *id_out)
+                       uint8_t *id_out, const char **err_msg)
 {
+    if (err_msg != NULL) *err_msg = NULL;
     if (handle == NULL || name == NULL || id_out == NULL) return ESP_ERR_INVALID_ARG;
 
     esp_err_t ret = ESP_OK;
@@ -64,6 +98,20 @@ esp_err_t f_source_add(f_source_handle_t handle, source_type_t type, uint8_t gpi
     if (slot < 0) {
         ret = ESP_ERR_NO_MEM;
         goto cleanup;
+    }
+
+    /* Claim the ADC pin for NTC sources before writing any slot state so a
+     * conflicting or reserved pin aborts the add with no source created. MANUAL
+     * and DS18B20 sources hold no per-source claim: MANUAL never reads hardware,
+     * and DS18B20 sources live on the shared 1-Wire bus (claimed at bus init). */
+    if (type == SOURCE_TYPE_NTC && gpio != F_SOURCE_GPIO_NONE) {
+        ret = f_gpio_claim(handle->gpio, gpio, F_GPIO_CAP_ADC);
+        if (ret != ESP_OK) {
+            f_source_set_claim_err(err_msg, handle->gpio, gpio);
+            ESP_LOGE(TAG, "Source add failed: GPIO %d ADC claim error: %s", gpio,
+                     esp_err_to_name(ret));
+            goto cleanup;
+        }
     }
 
     f_source_info_t *s = &handle->sources[slot];
@@ -152,9 +200,17 @@ esp_err_t f_source_remove(f_source_handle_t handle, uint8_t id)
         ret = ESP_ERR_NOT_FOUND;
         goto cleanup;
     }
+    source_type_t stype = handle->sources[id].type;
+    uint8_t sgpio       = handle->sources[id].gpio;
     memset(&handle->sources[id], 0, sizeof(f_source_info_t));
     handle->slot_used[id] = false;
     handle->count--;
+
+    /* Release the ADC claim for NTC sources only. MANUAL and DS18B20 sources hold
+     * no per-source claim; f_gpio_release is a safe no-op for a never-claimed pin. */
+    if (stype == SOURCE_TYPE_NTC && sgpio != F_SOURCE_GPIO_NONE) {
+        f_gpio_release(handle->gpio, sgpio);
+    }
 
 cleanup:
     xSemaphoreGiveRecursive(handle->mutex);

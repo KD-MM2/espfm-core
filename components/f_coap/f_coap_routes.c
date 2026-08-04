@@ -123,11 +123,28 @@ static void handle_fan_post(coap_resource_t *resource, coap_session_t *session,
         coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
     }
+    const char *err_msg = NULL;
     uint8_t nid;
-    if (f_fan_add(h->fan, (uint8_t)cr.pwm_gpio, (uint8_t)cr.tach_gpio, cr.name, &nid) != ESP_OK) {
-        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
+    esp_err_t err =
+        f_fan_add(h->fan, (uint8_t)cr.pwm_gpio, (uint8_t)cr.tach_gpio, cr.name, &nid, &err_msg);
+    if (err != ESP_OK) {
+        static StatusResponse sr;
+        sr            = (StatusResponse)StatusResponse_init_default;
+        sr.ok         = false;
+        sr.error_code = (uint32_t)err;
+        if (err_msg) snprintf(sr.error_msg, sizeof(sr.error_msg), "%s", err_msg);
+        encode_response(resp, COAP_RESPONSE_CODE_BAD_REQUEST, &sr, &StatusResponse_msg);
         return;
     }
+    /* Apply optional initial settings */
+    if (cr.has_mode) f_fan_set_mode(h->fan, nid, (fan_mode_t)cr.mode);
+    if (cr.has_duty) f_fan_set_duty(h->fan, nid, (uint8_t)cr.duty);
+    if (cr.has_source_id) f_fan_set_source(h->fan, nid, (uint8_t)cr.source_id);
+    if (cr.has_curve_id) f_fan_set_curve(h->fan, nid, (uint8_t)cr.curve_id);
+    if (cr.has_schedule_id) f_fan_set_schedule(h->fan, nid, (uint8_t)cr.schedule_id);
+    if (cr.has_group_id) f_fan_set_group(h->fan, nid, (uint8_t)cr.group_id);
+    if (cr.has_inverted) f_fan_set_inverted(h->fan, nid, cr.inverted);
+    if (cr.has_enabled) f_fan_set_enabled(h->fan, nid, cr.enabled);
     save_config(h);
     f_fan_info_t fi;
     f_fan_get_info(h->fan, nid, &fi);
@@ -169,9 +186,19 @@ static void handle_fan_put(coap_resource_t *resource, coap_session_t *session,
     if (ur.has_enabled) f_fan_set_enabled(h->fan, (uint8_t)id, ur.enabled);
     /* GPIO in-place swap: tear down old LEDC/PCNT, allocate on new pins */
     if (ur.has_pwm_gpio || ur.has_tach_gpio) {
-        uint8_t new_pwm  = ur.has_pwm_gpio ? (uint8_t)ur.pwm_gpio : fi.pwm_gpio;
-        uint8_t new_tach = ur.has_tach_gpio ? (uint8_t)ur.tach_gpio : fi.tach_gpio;
-        f_fan_set_gpio(h->fan, (uint8_t)id, new_pwm, new_tach);
+        uint8_t new_pwm     = ur.has_pwm_gpio ? (uint8_t)ur.pwm_gpio : fi.pwm_gpio;
+        uint8_t new_tach    = ur.has_tach_gpio ? (uint8_t)ur.tach_gpio : fi.tach_gpio;
+        const char *err_msg = NULL;
+        esp_err_t err       = f_fan_set_gpio(h->fan, (uint8_t)id, new_pwm, new_tach, &err_msg);
+        if (err != ESP_OK) {
+            static StatusResponse sr;
+            sr            = (StatusResponse)StatusResponse_init_default;
+            sr.ok         = false;
+            sr.error_code = (uint32_t)err;
+            if (err_msg) snprintf(sr.error_msg, sizeof(sr.error_msg), "%s", err_msg);
+            encode_response(resp, COAP_RESPONSE_CODE_BAD_REQUEST, &sr, &StatusResponse_msg);
+            return;
+        }
     }
     save_config(h);
     f_fan_get_info(h->fan, (uint8_t)id, &fi);
@@ -289,7 +316,7 @@ static void handle_ds18b20_config(coap_resource_t *resource, coap_session_t *ses
     }
 
     f_ds18b20_handle_t ds18b20 = NULL;
-    esp_err_t err              = f_ds18b20_init(&ds18b20, gpio);
+    esp_err_t err              = f_ds18b20_init(&ds18b20, gpio, h->gpio);
     if (err != ESP_OK) {
         coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
         return;
@@ -382,8 +409,16 @@ static void handle_source_post(coap_resource_t *resource, coap_session_t *sessio
                 return;
             }
         } else {
-            if (f_source_add(h->source, stype, (uint8_t)cr.gpio, cr.name, &nid) != ESP_OK) {
-                coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
+            const char *err_msg = NULL;
+            esp_err_t err =
+                f_source_add(h->source, stype, (uint8_t)cr.gpio, cr.name, &nid, &err_msg);
+            if (err != ESP_OK) {
+                static StatusResponse sr;
+                sr            = (StatusResponse)StatusResponse_init_default;
+                sr.ok         = false;
+                sr.error_code = (uint32_t)err;
+                if (err_msg) snprintf(sr.error_msg, sizeof(sr.error_msg), "%s", err_msg);
+                encode_response(resp, COAP_RESPONSE_CODE_BAD_REQUEST, &sr, &StatusResponse_msg);
                 return;
             }
         }
@@ -879,6 +914,62 @@ static void handle_system_post(coap_resource_t *resource, coap_session_t *sessio
     ESP_LOGI(TAG, "Reboot scheduled in 2 seconds");
 }
 
+static void handle_config_post(coap_resource_t *resource, coap_session_t *session,
+                               const coap_pdu_t *req, const coap_string_t *query, coap_pdu_t *resp)
+{
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
+
+    /* Decode the full ConfigFile body (static: ~3.8 KB, keep off the 8 KB coap_task stack) */
+    static ConfigFile cfg;
+    cfg = (ConfigFile)ConfigFile_init_default;
+    if (!decode_request(req, &cfg, &ConfigFile_msg)) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_BAD_REQUEST);
+        return;
+    }
+
+    const char *err_msg = NULL;
+    esp_err_t err =
+        f_config_import_all(h->config, h->fan, h->source, h->curve, h->schedule, &cfg, &err_msg);
+    if (err == ESP_ERR_INVALID_ARG) {
+        static StatusResponse sr;
+        sr            = (StatusResponse)StatusResponse_init_default;
+        sr.ok         = false;
+        sr.error_code = (uint32_t)err;
+        if (err_msg) snprintf(sr.error_msg, sizeof(sr.error_msg), "%s", err_msg);
+        encode_response(resp, COAP_RESPONSE_CODE_BAD_REQUEST, &sr, &StatusResponse_msg);
+        return;
+    }
+    if (err != ESP_OK) {
+        static StatusResponse sr;
+        sr    = (StatusResponse)StatusResponse_init_default;
+        sr.ok = false;
+        snprintf(sr.error_msg, sizeof(sr.error_msg), "persist failed: %s", esp_err_to_name(err));
+        encode_response(resp, COAP_RESPONSE_CODE_INTERNAL_ERROR, &sr, &StatusResponse_msg);
+        return;
+    }
+
+    static StatusResponse sr;
+    sr    = (StatusResponse)StatusResponse_init_default;
+    sr.ok = true;
+    encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &sr, &StatusResponse_msg);
+
+    if (!s_reboot_pending) {
+        if (!s_reboot_timer) {
+            const esp_timer_create_args_t args = {
+                .callback = reboot_timer_cb,
+                .name     = "coap_reboot",
+            };
+            ESP_ERROR_CHECK(esp_timer_create(&args, &s_reboot_timer));
+        }
+        esp_err_t terr = esp_timer_start_once(s_reboot_timer, 2000000); /* 2 seconds */
+        if (terr == ESP_OK)
+            s_reboot_pending = true;
+        else
+            ESP_LOGE(TAG, "import reboot timer start failed: %s", esp_err_to_name(terr));
+    }
+    ESP_LOGI(TAG, "Config import OK, reboot scheduled in 2 seconds");
+}
+
 /* ------------------------------------------------------------------ */
 /*  System handler: /system/{info,hostname}                            */
 /* ------------------------------------------------------------------ */
@@ -938,6 +1029,38 @@ static void handle_system_put(coap_resource_t *resource, coap_session_t *session
 }
 
 /* ------------------------------------------------------------------ */
+/*  Config handler: /config (GET export)                               */
+/* ------------------------------------------------------------------ */
+
+static void coap_free_config_data(coap_session_t *session, void *app_ptr)
+{
+    (void)session;
+    free(app_ptr);
+}
+
+static void handle_config_get(coap_resource_t *resource, coap_session_t *session,
+                              const coap_pdu_t *req, const coap_string_t *query, coap_pdu_t *resp)
+{
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
+    uint8_t *buf     = NULL;
+    size_t len       = 0;
+
+    esp_err_t err    = f_config_export_all(h->fan, h->source, h->curve, h->schedule, &buf, &len);
+    if (err != ESP_OK) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_INTERNAL_ERROR);
+        return;
+    }
+
+    coap_pdu_set_code(resp, COAP_RESPONSE_CODE_CONTENT);
+    if (!coap_add_data_large_response(resource, session, req, resp, query,
+                                      COAP_MEDIATYPE_APPLICATION_OCTET_STREAM, -1, 0, len, buf,
+                                      coap_free_config_data, buf)) {
+        /* libcoap has set a 5.00 code on the response and released buf via the callback */
+        return;
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Resource registration                                              */
 /*  libcoap matches by exact URI path.  Register every path the       */
 /*  shell sends, including sub-paths like /system/info, /wifi/scan.   */
@@ -971,6 +1094,9 @@ void f_coap_register_resources(coap_context_t *ctx, struct f_coap *h)
 
     /* /schedules — list (GET), create (POST) */
     add_resource(ctx, h, "schedules", handle_schedule_get, handle_schedule_post, NULL, NULL);
+
+    /* /config — export (GET) and import (POST) all configuration */
+    add_resource(ctx, h, "config", handle_config_get, handle_config_post, NULL, NULL);
 
     /* Sub-paths for {resource}/{id} — register for IDs 0..7 */
     for (int i = 0; i < 8; i++) {

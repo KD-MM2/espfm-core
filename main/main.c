@@ -65,10 +65,10 @@ void app_main(void)
 
     /* --- Registries --- */
     f_fan_handle_t fan;
-    ESP_ERROR_CHECK(f_fan_init(&fan, ledc, pcnt));
+    ESP_ERROR_CHECK(f_fan_init(&fan, ledc, pcnt, gpio));
 
     f_source_handle_t source;
-    ESP_ERROR_CHECK(f_source_init(&source, adc, &ds18b20));
+    ESP_ERROR_CHECK(f_source_init(&source, adc, &ds18b20, gpio));
 
     f_curve_handle_t curve;
     ESP_ERROR_CHECK(f_curve_init(&curve));
@@ -86,7 +86,10 @@ void app_main(void)
         uint8_t ds_gpio;
         if (f_config_load_ds18b20_gpio(config, &ds_gpio) == ESP_OK) {
             ESP_LOGI(TAG, "DS18B20: initializing on GPIO %d (from config)", ds_gpio);
-            f_ds18b20_init(&ds18b20, ds_gpio);
+            esp_err_t err = f_ds18b20_init(&ds18b20, ds_gpio, gpio);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "DS18B20 init on GPIO %d failed: %s", ds_gpio, esp_err_to_name(err));
+            }
         }
     }
 
@@ -100,7 +103,7 @@ void app_main(void)
 
     /* --- CoAP Server (UDP :5683, Protobuf, WiFi-aware lifecycle) --- */
     f_coap_handle_t coap;
-    ESP_ERROR_CHECK(f_coap_init(&coap, fan, source, curve, schedule, config, mdns, &ds18b20));
+    ESP_ERROR_CHECK(f_coap_init(&coap, fan, source, curve, schedule, config, mdns, &ds18b20, gpio));
 
     /* --- WiFi Provisioning (captive portal on STA failure) --- */
     f_provision_handle_t provision;
