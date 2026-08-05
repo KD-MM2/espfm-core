@@ -33,8 +33,10 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan, f_sour
  * registries) and *err_msg holds the real claim/apply error. The normalized ESP_FAIL (never
  * ESP_ERR_INVALID_ARG) lets the caller distinguish apply failure from validation failure,
  * since apply failure mutates state and needs a recovery reboot.
- * Returns ESP_FAIL on persist failure too; *err_msg stays NULL (the apply fully succeeded,
- * only the disk write failed — no recovery reboot needed). */
+ * Returns a non-ESP_OK error on persist failure too (ESP_FAIL from fopen/short-write/
+ * pb-encode, or ESP_ERR_NO_MEM from the export buffer calloc); *err_msg stays NULL (the
+ * apply fully succeeded, only the disk write failed — no recovery reboot needed).
+ * The caller keys the recovery decision on err_msg, not on the exact code. */
 esp_err_t f_config_import_all(f_config_handle_t handle, f_fan_handle_t fan,
                               f_source_handle_t source, f_curve_handle_t curve,
                               f_schedule_handle_t schedule, f_gpio_handle_t gpio,

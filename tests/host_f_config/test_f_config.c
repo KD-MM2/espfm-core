@@ -516,17 +516,18 @@ esp_err_t f_fan_set_enabled(f_fan_handle_t handle, uint8_t id, bool enabled)
 
 /* Live f_gpio registry stub. The import-validation live-registry checks are
  * gated on a non-NULL gpio handle. Mirror the real f_gpio_get_caps contract:
- * pins >= F_GPIO_MAX_PINS and any pin in g_reserved_gpio[] return the
- * 0xFFFFFFFF reserved sentinel; otherwise the per-pin caps array (default 0).
- * Tests may install g_reserved_gpio[] / g_caps_override to exercise the
- * "GPIO is reserved" and "GPIO is the active DS18B20 bus pin" branches. */
+ * out-of-range pins return 0 (f_gpio.c), while a pin in g_reserved_gpio[]
+ * returns the 0xFFFFFFFF reserved sentinel the real registry stamps at init;
+ * otherwise the per-pin caps array (default 0). Tests may install
+ * g_reserved_gpio[] / g_caps_override to exercise the "GPIO is reserved" and
+ * "GPIO is the active DS18B20 bus pin" branches. */
 static uint8_t g_reserved_gpio[8];
 static uint32_t g_caps_override[F_GPIO_MAX_PINS];
 
 uint32_t f_gpio_get_caps(f_gpio_handle_t handle, uint8_t pin)
 {
     (void)handle;
-    if (pin >= F_GPIO_MAX_PINS) return 0xFFFFFFFF;
+    if (pin >= F_GPIO_MAX_PINS) return 0; /* real f_gpio_get_caps: OOR is 0, not reserved */
     for (int i = 0; i < 8 && g_reserved_gpio[i] != 0xFF; i++)
         if (g_reserved_gpio[i] == pin) return 0xFFFFFFFF;
     return g_caps_override[pin];
