@@ -104,6 +104,7 @@ static f_fan_handle_t g_import_fan;           /* recorded fan arg */
 static f_source_handle_t g_import_source;     /* recorded source arg */
 static f_curve_handle_t g_import_curve;       /* recorded curve arg */
 static f_schedule_handle_t g_import_schedule; /* recorded schedule arg */
+static f_gpio_handle_t g_import_gpio;         /* recorded gpio arg */
 static const ConfigFile *g_import_cfg_ptr;    /* recorded cfg pointer */
 
 static int g_cgd_ret;             /* coap_get_data return value */
@@ -286,8 +287,8 @@ void *__wrap_coap_resource_get_userdata(coap_resource_t *resource)
 
 esp_err_t __wrap_f_config_import_all(f_config_handle_t handle, f_fan_handle_t fan,
                                      f_source_handle_t source, f_curve_handle_t curve,
-                                     f_schedule_handle_t schedule, const ConfigFile *cfg,
-                                     const char **err_msg)
+                                     f_schedule_handle_t schedule, f_gpio_handle_t gpio,
+                                     const ConfigFile *cfg, const char **err_msg)
 {
     g_import_calls++;
     g_import_config   = handle;
@@ -295,6 +296,7 @@ esp_err_t __wrap_f_config_import_all(f_config_handle_t handle, f_fan_handle_t fa
     g_import_source   = source;
     g_import_curve    = curve;
     g_import_schedule = schedule;
+    g_import_gpio     = gpio;
     g_import_cfg_ptr  = cfg;
     if (err_msg) *err_msg = g_import_err_msg;
     return g_import_err;
@@ -665,6 +667,7 @@ static void reset_test_state(void)
     g_import_source   = NULL;
     g_import_curve    = NULL;
     g_import_schedule = NULL;
+    g_import_gpio     = NULL;
     g_import_cfg_ptr  = NULL;
 
     g_cgd_ret         = 1;
@@ -814,6 +817,7 @@ static void install_nonnull_handles(void)
     g_fake_h.source   = H_SRC;
     g_fake_h.curve    = H_CUR;
     g_fake_h.schedule = H_SCH;
+    g_fake_h.gpio     = (f_gpio_handle_t)0x1;
     g_fake_h.control  = (f_control_handle_t)0xABC;
 }
 
@@ -1333,6 +1337,7 @@ static void test_config_post_validation_failure_returns_400_with_error_msg(void)
     CHECK(g_import_source == H_SRC);
     CHECK(g_import_curve == H_CUR);
     CHECK(g_import_schedule == H_SCH);
+    CHECK(g_import_gpio == g_fake_h.gpio); /* f_gpio registry threaded through */
     CHECK(g_import_cfg_ptr != NULL);
     CHECK(g_last_code == COAP_RESPONSE_CODE_BAD_REQUEST);
     CHECK(g_cad_calls == 1);

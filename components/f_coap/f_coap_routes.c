@@ -865,6 +865,27 @@ static void reboot_timer_cb(void *arg)
     esp_restart();
 }
 
+/* Schedule the 2s one-shot reboot if one is not already pending. Used by the
+ * config import path both on success and on apply failure, so the device reloads
+ * the persisted config.pb (the previous config, which the failed apply never
+ * overwrote) and never keeps running a partial or empty registry state. */
+static void schedule_import_reboot(void)
+{
+    if (s_reboot_pending) return;
+    if (!s_reboot_timer) {
+        const esp_timer_create_args_t args = {
+            .callback = reboot_timer_cb,
+            .name     = "coap_reboot",
+        };
+        ESP_ERROR_CHECK(esp_timer_create(&args, &s_reboot_timer));
+    }
+    esp_err_t terr = esp_timer_start_once(s_reboot_timer, 2000000); /* 2 seconds */
+    if (terr == ESP_OK)
+        s_reboot_pending = true;
+    else
+        ESP_LOGE(TAG, "import reboot timer start failed: %s", esp_err_to_name(terr));
+}
+
 static void handle_system_post(coap_resource_t *resource, coap_session_t *session,
                                const coap_pdu_t *req, const coap_string_t *query, coap_pdu_t *resp)
 {
@@ -928,9 +949,10 @@ static void handle_config_post(coap_resource_t *resource, coap_session_t *sessio
     }
 
     const char *err_msg = NULL;
-    esp_err_t err =
-        f_config_import_all(h->config, h->fan, h->source, h->curve, h->schedule, &cfg, &err_msg);
+    esp_err_t err       = f_config_import_all(h->config, h->fan, h->source, h->curve, h->schedule,
+                                              h->gpio, &cfg, &err_msg);
     if (err == ESP_ERR_INVALID_ARG) {
+        /* Validation failure: zero mutation, the live config is intact, no reboot. */
         static StatusResponse sr;
         sr            = (StatusResponse)StatusResponse_init_default;
         sr.ok         = false;
@@ -943,8 +965,21 @@ static void handle_config_post(coap_resource_t *resource, coap_session_t *sessio
         static StatusResponse sr;
         sr    = (StatusResponse)StatusResponse_init_default;
         sr.ok = false;
-        snprintf(sr.error_msg, sizeof(sr.error_msg), "persist failed: %s", esp_err_to_name(err));
-        encode_response(resp, COAP_RESPONSE_CODE_INTERNAL_ERROR, &sr, &StatusResponse_msg);
+        if (err_msg != NULL) {
+            /* Apply failure: f_config_import_all re-cleared the partial apply, so the
+             * registries are empty-but-consistent. Encode the real claim/apply error and
+             * reboot so the previous config.pb reloads instead of running empty. */
+            sr.error_code = (uint32_t)err;
+            snprintf(sr.error_msg, sizeof(sr.error_msg), "%s", err_msg);
+            encode_response(resp, COAP_RESPONSE_CODE_BAD_REQUEST, &sr, &StatusResponse_msg);
+            schedule_import_reboot();
+        } else {
+            /* Persist failure: apply fully succeeded but config.pb was not overwritten.
+             * The new config stays live in RAM; no reboot (nothing partial to recover). */
+            snprintf(sr.error_msg, sizeof(sr.error_msg), "persist failed: %s",
+                     esp_err_to_name(err));
+            encode_response(resp, COAP_RESPONSE_CODE_INTERNAL_ERROR, &sr, &StatusResponse_msg);
+        }
         return;
     }
 
@@ -953,20 +988,7 @@ static void handle_config_post(coap_resource_t *resource, coap_session_t *sessio
     sr.ok = true;
     encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &sr, &StatusResponse_msg);
 
-    if (!s_reboot_pending) {
-        if (!s_reboot_timer) {
-            const esp_timer_create_args_t args = {
-                .callback = reboot_timer_cb,
-                .name     = "coap_reboot",
-            };
-            ESP_ERROR_CHECK(esp_timer_create(&args, &s_reboot_timer));
-        }
-        esp_err_t terr = esp_timer_start_once(s_reboot_timer, 2000000); /* 2 seconds */
-        if (terr == ESP_OK)
-            s_reboot_pending = true;
-        else
-            ESP_LOGE(TAG, "import reboot timer start failed: %s", esp_err_to_name(terr));
-    }
+    schedule_import_reboot();
     ESP_LOGI(TAG, "Config import OK, reboot scheduled in 2 seconds");
 }
 

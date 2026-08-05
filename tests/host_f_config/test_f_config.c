@@ -63,6 +63,7 @@ static int g_fail_fan_set_mode;
 static int g_fail_fan_set_duty;
 static int g_fail_fan_set_group;
 static int g_fail_fan_set_inverted;
+static int g_fail_fan_set_enabled;
 static int g_fail_fan_set_source;
 static int g_fail_fan_set_curve;
 static int g_fail_fan_set_schedule;
@@ -82,6 +83,7 @@ static int g_fan_set_mode_calls;
 static int g_fan_set_duty_calls;
 static int g_fan_set_group_calls;
 static int g_fan_set_inverted_calls;
+static int g_fan_set_enabled_calls;
 static int g_fan_set_source_calls;
 static int g_fan_set_curve_calls;
 static int g_fan_set_schedule_calls;
@@ -502,6 +504,27 @@ esp_err_t f_fan_set_inverted(f_fan_handle_t handle, uint8_t id, bool inverted)
     return ESP_OK;
 }
 
+esp_err_t f_fan_set_enabled(f_fan_handle_t handle, uint8_t id, bool enabled)
+{
+    g_fan_set_enabled_calls++;
+    if (handle == NULL || id >= F_FAN_MAX_COUNT) return ESP_ERR_INVALID_ARG;
+    if (g_fail_fan_set_enabled) return ESP_ERR_INVALID_ARG;
+    if (!fan_used[id]) return ESP_ERR_NOT_FOUND;
+    fan_info[id].enabled = enabled;
+    return ESP_OK;
+}
+
+/* Live f_gpio registry stub. The import-validation live-registry checks are
+ * gated on a non-NULL gpio handle; every f_config harness test passes NULL so
+ * this is never called, but it must link. Mirror the real f_gpio_get_caps
+ * contract for the reserved-pin sentinel in case a future test passes a handle. */
+uint32_t f_gpio_get_caps(f_gpio_handle_t handle, uint8_t pin)
+{
+    (void)handle;
+    if (pin >= F_GPIO_MAX_PINS) return 0xFFFFFFFF;
+    return 0; /* no capabilities claimed by default */
+}
+
 esp_err_t f_fan_set_source(f_fan_handle_t handle, uint8_t id, uint8_t source_id)
 {
     g_fan_set_source_calls++;
@@ -723,6 +746,7 @@ static void reset_test_state(void)
     g_fail_fan_set_duty          = 0;
     g_fail_fan_set_group         = 0;
     g_fail_fan_set_inverted      = 0;
+    g_fail_fan_set_enabled       = 0;
     g_fail_fan_set_source        = 0;
     g_fail_fan_set_curve         = 0;
     g_fail_fan_set_schedule      = 0;
@@ -742,6 +766,7 @@ static void reset_test_state(void)
     g_fan_set_duty_calls         = 0;
     g_fan_set_group_calls        = 0;
     g_fan_set_inverted_calls     = 0;
+    g_fan_set_enabled_calls      = 0;
     g_fan_set_source_calls       = 0;
     g_fan_set_curve_calls        = 0;
     g_fan_set_schedule_calls     = 0;
@@ -1561,7 +1586,7 @@ static void test_f_config_import_all_rejects_null_handle(void)
     reset_test_state();
     ConfigFile cfg = ConfigFile_init_default;
     const char *em = (const char *)0x1;
-    esp_err_t err  = f_config_import_all(NULL, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+    esp_err_t err  = f_config_import_all(NULL, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(em == NULL);
     CHECK(g_fopen_calls == 0);
@@ -1578,7 +1603,7 @@ static void test_f_config_import_all_rejects_unmounted(void)
     ConfigFile cfg    = ConfigFile_init_default;
     const char *em    = (const char *)0x1;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(em == NULL);
     CHECK(g_fopen_calls == 0);
@@ -1593,7 +1618,7 @@ static void test_f_config_import_all_rejects_null_cfg(void)
     struct f_config h = {"", true, 0};
     const char *em    = (const char *)0x1;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, NULL, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(em == NULL);
     CHECK(g_fopen_calls == 0);
@@ -1611,7 +1636,7 @@ static void test_f_config_import_all_rejects_fans_overflow(void)
     cfg.has_fans        = true;
     cfg.fans.fans_count = 9; /* do NOT fill fans[8]; capacity guard fires first */
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "max fans reached (8)") == 0);
     CHECK(mutation_clean());
@@ -1629,7 +1654,7 @@ static void test_f_config_import_all_rejects_sources_overflow(void)
     cfg.has_sources           = true;
     cfg.sources.sources_count = 9;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "max sources reached (8)") == 0);
     CHECK(mutation_clean());
@@ -1647,7 +1672,7 @@ static void test_f_config_import_all_rejects_curves_overflow(void)
     cfg.has_curves          = true;
     cfg.curves.curves_count = 17;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "max curves reached (16)") == 0);
     CHECK(mutation_clean());
@@ -1665,7 +1690,7 @@ static void test_f_config_import_all_rejects_schedules_overflow(void)
     cfg.has_schedules             = true;
     cfg.schedules.schedules_count = 9;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "max schedules reached (8)") == 0);
     CHECK(mutation_clean());
@@ -1731,7 +1756,7 @@ static void test_f_config_import_all_accepts_max_capacity(void)
     }
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_OK);
     CHECK(em == NULL);
     CHECK(g_fan_add_calls == 8);
@@ -1765,7 +1790,7 @@ static void test_f_config_import_all_rejects_fan_pwm_gpio(void)
     cfg.fans.fans[0].mode      = 0;
     cfg.fans.fans[0].duty      = 50;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "GPIO must be 0-48") == 0);
     CHECK(mutation_clean());
@@ -1787,7 +1812,7 @@ static void test_f_config_import_all_rejects_fan_tach_gpio(void)
     cfg.fans.fans[0].mode      = 0;
     cfg.fans.fans[0].duty      = 50;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "GPIO must be 0-48") == 0);
     CHECK(mutation_clean());
@@ -1809,7 +1834,7 @@ static void test_f_config_import_all_rejects_fan_mode(void)
     cfg.fans.fans[0].mode      = 2;
     cfg.fans.fans[0].duty      = 50;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "mode must be 0 (manual) or 1 (auto)") == 0);
     CHECK(mutation_clean());
@@ -1831,7 +1856,7 @@ static void test_f_config_import_all_rejects_fan_duty(void)
     cfg.fans.fans[0].mode      = 0;
     cfg.fans.fans[0].duty      = 101;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "duty must be 0-100") == 0);
     CHECK(mutation_clean());
@@ -1851,7 +1876,7 @@ static void test_f_config_import_all_rejects_ntc_source_gpio(void)
     cfg.sources.sources[0].type = SourceType_SOURCE_TYPE_NTC;
     cfg.sources.sources[0].gpio = 255;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "GPIO must be 0-48") == 0);
     CHECK(mutation_clean());
@@ -1877,7 +1902,7 @@ static void test_f_config_import_all_rejects_manual_source_temp_below_min(void)
     s0->temp_c                     = -40.01f;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(em != NULL && strcmp(em, "temp_c must be -40.0 to 125.0") == 0);
     CHECK(mutation_clean());
@@ -1904,7 +1929,7 @@ static void test_f_config_import_all_rejects_manual_source_temp_above_max(void)
     s0->temp_c                     = 125.01f;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(em != NULL && strcmp(em, "temp_c must be -40.0 to 125.0") == 0);
     CHECK(mutation_clean());
@@ -1934,7 +1959,7 @@ static void test_f_config_import_all_accepts_manual_source_temp_min_boundary(voi
     s0->temp_c                     = -40.0f;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_OK);
     CHECK(em == NULL);
     CHECK(g_source_add_calls == 1);
@@ -1967,7 +1992,7 @@ static void test_f_config_import_all_accepts_manual_source_temp_max_boundary(voi
     s0->temp_c                     = 125.0f;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_OK);
     CHECK(em == NULL);
     CHECK(g_source_add_calls == 1);
@@ -2000,7 +2025,7 @@ static void test_f_config_import_all_ntc_source_out_of_range_temp_passes(void)
     s0->temp_c                     = 999.0f;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_OK);
     CHECK(em == NULL);
     CHECK(g_source_add_calls == 1);
@@ -2033,7 +2058,7 @@ static void test_f_config_import_all_ds18b20_source_out_of_range_temp_passes(voi
     s0->temp_c                     = -999.0f;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_OK);
     CHECK(em == NULL);
     CHECK(g_source_add_ds18b20_calls == 1);
@@ -2062,7 +2087,7 @@ static void test_f_config_import_all_rejects_unknown_type_out_of_range_temp(void
     s0->temp_c                     = 200.0f;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(em != NULL && strcmp(em, "temp_c must be -40.0 to 125.0") == 0);
     CHECK(mutation_clean());
@@ -2084,7 +2109,7 @@ static void test_f_config_import_all_rejects_curve_too_few_points(void)
     cfg.curves.curves[0].points[0].temp_c = 30.0f;
     cfg.curves.curves[0].points[0].duty   = 20;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "curve must have 2-16 points") == 0);
     CHECK(mutation_clean());
@@ -2107,7 +2132,7 @@ static void test_f_config_import_all_rejects_curve_too_many_points(void)
         cfg.curves.curves[0].points[j].duty   = 20;
     }
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "curve must have 2-16 points") == 0);
     CHECK(mutation_clean());
@@ -2130,7 +2155,7 @@ static void test_f_config_import_all_rejects_curve_unsorted(void)
     cfg.curves.curves[0].points[1].temp_c = 30.0f;
     cfg.curves.curves[0].points[1].duty   = 20;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "curve points must be sorted by temp_c ascending") == 0);
     CHECK(mutation_clean());
@@ -2153,7 +2178,7 @@ static void test_f_config_import_all_rejects_curve_point_duty(void)
     cfg.curves.curves[0].points[1].temp_c = 50.0f;
     cfg.curves.curves[0].points[1].duty   = 150;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "duty must be 0-100") == 0);
     CHECK(mutation_clean());
@@ -2174,6 +2199,9 @@ static void test_f_config_import_all_rejects_schedule_time(void)
     cfg.fans.fans[0].tach_gpio           = 255;
     cfg.fans.fans[0].mode                = 0;
     cfg.fans.fans[0].duty                = 50;
+    cfg.fans.fans[0].source_id           = 255; /* unbound: M3 cross-ref check */
+    cfg.fans.fans[0].curve_id            = 255;
+    cfg.fans.fans[0].schedule_id         = 255;
     cfg.has_schedules                    = true;
     cfg.schedules.schedules_count        = 1;
     cfg.schedules.schedules[0].start_min = 1500;
@@ -2181,7 +2209,7 @@ static void test_f_config_import_all_rejects_schedule_time(void)
     cfg.schedules.schedules[0].duty      = 50;
     cfg.schedules.schedules[0].fan_id    = 0;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "start_min/end_min must be 0-1439") == 0);
     CHECK(mutation_clean());
@@ -2202,6 +2230,9 @@ static void test_f_config_import_all_rejects_schedule_duty(void)
     cfg.fans.fans[0].tach_gpio           = 255;
     cfg.fans.fans[0].mode                = 0;
     cfg.fans.fans[0].duty                = 50;
+    cfg.fans.fans[0].source_id           = 255; /* unbound: M3 cross-ref check */
+    cfg.fans.fans[0].curve_id            = 255;
+    cfg.fans.fans[0].schedule_id         = 255;
     cfg.has_schedules                    = true;
     cfg.schedules.schedules_count        = 1;
     cfg.schedules.schedules[0].start_min = 480;
@@ -2209,7 +2240,7 @@ static void test_f_config_import_all_rejects_schedule_duty(void)
     cfg.schedules.schedules[0].duty      = 200;
     cfg.schedules.schedules[0].fan_id    = 0;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "duty must be 0-100") == 0);
     CHECK(mutation_clean());
@@ -2227,10 +2258,13 @@ static void test_f_config_import_all_rejects_schedule_missing_fan(void)
     cfg.has_fans        = true;
     cfg.fans.fans_count = 2;
     for (int i = 0; i < 2; i++) {
-        cfg.fans.fans[i].pwm_gpio  = 15 + i;
-        cfg.fans.fans[i].tach_gpio = 255;
-        cfg.fans.fans[i].mode      = 0;
-        cfg.fans.fans[i].duty      = 50;
+        cfg.fans.fans[i].pwm_gpio    = 15 + i;
+        cfg.fans.fans[i].tach_gpio   = 255;
+        cfg.fans.fans[i].mode        = 0;
+        cfg.fans.fans[i].duty        = 50;
+        cfg.fans.fans[i].source_id   = 255; /* unbound: M3 cross-ref check */
+        cfg.fans.fans[i].curve_id    = 255;
+        cfg.fans.fans[i].schedule_id = 255;
     }
     cfg.has_schedules                    = true;
     cfg.schedules.schedules_count        = 1;
@@ -2239,7 +2273,7 @@ static void test_f_config_import_all_rejects_schedule_missing_fan(void)
     cfg.schedules.schedules[0].end_min   = 1080;
     cfg.schedules.schedules[0].duty      = 50;
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
     CHECK(strcmp(em, "schedule references non-existent fan") == 0);
     CHECK(mutation_clean());
@@ -2258,7 +2292,8 @@ static void test_f_config_import_all_clear_tolerates_empty_and_null_handles(void
     const char *em    = (const char *)0x1;
     ConfigFile cfg    = ConfigFile_init_default;
 
-    esp_err_t err = f_config_import_all((f_config_handle_t)&h, NULL, NULL, NULL, NULL, &cfg, &em);
+    esp_err_t err =
+        f_config_import_all((f_config_handle_t)&h, NULL, NULL, NULL, NULL, NULL, &cfg, &em);
     CHECK(err == ESP_OK);
     CHECK(em == NULL);
     CHECK(g_schedule_remove_calls == F_SCHEDULE_MAX_COUNT);
@@ -2296,7 +2331,7 @@ static void test_f_config_import_all_happy_path_all_registries(void)
     build_happy_cfg(&cfg);
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_OK);
     CHECK(em == NULL);
     CHECK(g_schedule_remove_calls == F_SCHEDULE_MAX_COUNT);
@@ -2309,6 +2344,7 @@ static void test_f_config_import_all_happy_path_all_registries(void)
     CHECK(g_fan_set_duty_calls == 1);
     CHECK(g_fan_set_group_calls == 1);
     CHECK(g_fan_set_inverted_calls == 1);
+    CHECK(g_fan_set_enabled_calls == 1);
     CHECK(g_fan_set_source_calls == 1);
     CHECK(g_fan_set_curve_calls == 1);
     CHECK(g_fan_set_schedule_calls == 1);
@@ -2354,7 +2390,7 @@ static void test_f_config_import_all_empty_config_clears_all_registries(void)
     ConfigFile cfg = ConfigFile_init_default;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_OK);
     CHECK(em == NULL);
     CHECK(g_schedule_remove_calls == F_SCHEDULE_MAX_COUNT);
@@ -2400,7 +2436,7 @@ static void test_f_config_import_all_happy_path_null_err_msg(void)
     build_happy_cfg(&cfg);
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, NULL);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, NULL);
     CHECK(err == ESP_OK);
     CHECK(g_fopen_calls == 1);
     CHECK(g_fan_add_calls == 1);
@@ -2430,7 +2466,7 @@ static void test_f_config_import_all_apply_skips_fan_bindings_when_ff(void)
     cfg_single_fan(&cfg, 255, 255, 255);
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_OK);
     CHECK(em == NULL);
     CHECK(g_fan_add_calls == 1);
@@ -2438,6 +2474,7 @@ static void test_f_config_import_all_apply_skips_fan_bindings_when_ff(void)
     CHECK(g_fan_set_duty_calls == 1);
     CHECK(g_fan_set_group_calls == 1);
     CHECK(g_fan_set_inverted_calls == 1);
+    CHECK(g_fan_set_enabled_calls == 1);
     CHECK(g_fan_set_source_calls == 0);
     CHECK(g_fan_set_curve_calls == 0);
     CHECK(g_fan_set_schedule_calls == 0);
@@ -2468,7 +2505,7 @@ static void test_f_config_import_all_apply_skips_manual_update_when_temp_zero(vo
     s0->temp_c                     = 0.0f;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_OK);
     CHECK(em == NULL);
     CHECK(g_source_add_calls == 1);
@@ -2500,7 +2537,7 @@ static void test_f_config_import_all_apply_unknown_source_type_as_manual(void)
     s0->temp_c                     = 0.0f;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_OK);
     CHECK(em == NULL);
     CHECK(g_source_add_ds18b20_calls == 0);
@@ -2523,11 +2560,13 @@ static void test_f_config_import_all_apply_fan_add_fails(void)
     cfg_single_fan(&cfg, 255, 255, 255);
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
-    CHECK(em == NULL);
+    CHECK(em != NULL && strcmp(em, "config apply failed") == 0);
     CHECK(strstr(g_last_log, "import apply failed") != NULL);
-    CHECK(g_fan_remove_calls == F_FAN_MAX_COUNT);
+    /* Clear ran twice: once before apply, once after the failed apply (S1
+     * re-clear safety net so the registries are empty-but-consistent). */
+    CHECK(g_fan_remove_calls == 2 * F_FAN_MAX_COUNT);
     CHECK(g_fan_add_calls == 1);
     CHECK(g_fopen_calls == 0);
     printf("  [PASS] %s\n", __func__);
@@ -2545,9 +2584,9 @@ static void test_f_config_import_all_apply_fan_set_mode_fails(void)
     cfg_single_fan(&cfg, 255, 255, 255);
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
-    CHECK(em == NULL);
+    CHECK(em != NULL && strcmp(em, "config apply failed") == 0);
     CHECK(strstr(g_last_log, "import apply failed") != NULL);
     CHECK(g_fan_add_calls == 1);
     CHECK(g_fan_set_mode_calls == 1);
@@ -2567,9 +2606,9 @@ static void test_f_config_import_all_apply_fan_set_duty_fails(void)
     cfg_single_fan(&cfg, 255, 255, 255);
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
-    CHECK(em == NULL);
+    CHECK(em != NULL && strcmp(em, "config apply failed") == 0);
     CHECK(strstr(g_last_log, "import apply failed") != NULL);
     CHECK(g_fan_add_calls == 1);
     CHECK(g_fan_set_duty_calls == 1);
@@ -2589,9 +2628,9 @@ static void test_f_config_import_all_apply_fan_set_group_fails(void)
     cfg_single_fan(&cfg, 255, 255, 255);
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
-    CHECK(em == NULL);
+    CHECK(em != NULL && strcmp(em, "config apply failed") == 0);
     CHECK(strstr(g_last_log, "import apply failed") != NULL);
     CHECK(g_fan_add_calls == 1);
     CHECK(g_fan_set_group_calls == 1);
@@ -2611,9 +2650,9 @@ static void test_f_config_import_all_apply_fan_set_inverted_fails(void)
     cfg_single_fan(&cfg, 255, 255, 255);
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
-    CHECK(em == NULL);
+    CHECK(em != NULL && strcmp(em, "config apply failed") == 0);
     CHECK(strstr(g_last_log, "import apply failed") != NULL);
     CHECK(g_fan_add_calls == 1);
     CHECK(g_fan_set_inverted_calls == 1);
@@ -2631,11 +2670,17 @@ static void test_f_config_import_all_apply_fan_set_source_fails(void)
     g_fail_fan_set_source = 1;
     ConfigFile cfg;
     cfg_single_fan(&cfg, 0, 255, 255);
+    /* fan source_id=0 must resolve (M3 cross-ref validation) before apply is reached */
+    cfg.has_sources               = true;
+    cfg.sources.sources_count     = 1;
+    cfg.sources.sources[0].type   = SourceType_SOURCE_TYPE_MANUAL;
+    cfg.sources.sources[0].gpio   = 255;
+    cfg.sources.sources[0].temp_c = 25.0f;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
-    CHECK(em == NULL);
+    CHECK(em != NULL && strcmp(em, "config apply failed") == 0);
     CHECK(strstr(g_last_log, "import apply failed") != NULL);
     CHECK(g_fan_set_source_calls == 1);
     CHECK(g_fopen_calls == 0);
@@ -2652,11 +2697,19 @@ static void test_f_config_import_all_apply_fan_set_curve_fails(void)
     g_fail_fan_set_curve = 1;
     ConfigFile cfg;
     cfg_single_fan(&cfg, 255, 0, 255);
+    /* fan curve_id=0 must resolve (M3 cross-ref validation) before apply is reached */
+    cfg.has_curves                        = true;
+    cfg.curves.curves_count               = 1;
+    cfg.curves.curves[0].points_count     = 2;
+    cfg.curves.curves[0].points[0].temp_c = 30.0f;
+    cfg.curves.curves[0].points[0].duty   = 20;
+    cfg.curves.curves[0].points[1].temp_c = 50.0f;
+    cfg.curves.curves[0].points[1].duty   = 60;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
-    CHECK(em == NULL);
+    CHECK(em != NULL && strcmp(em, "config apply failed") == 0);
     CHECK(strstr(g_last_log, "import apply failed") != NULL);
     CHECK(g_fan_set_curve_calls == 1);
     CHECK(g_fopen_calls == 0);
@@ -2673,11 +2726,19 @@ static void test_f_config_import_all_apply_fan_set_schedule_fails(void)
     g_fail_fan_set_schedule = 1;
     ConfigFile cfg;
     cfg_single_fan(&cfg, 255, 255, 0);
+    /* fan schedule_id=0 must resolve (M3 cross-ref validation) before apply is reached */
+    cfg.has_schedules                    = true;
+    cfg.schedules.schedules_count        = 1;
+    cfg.schedules.schedules[0].fan_id    = 0;
+    cfg.schedules.schedules[0].duty      = 50;
+    cfg.schedules.schedules[0].start_min = 480;
+    cfg.schedules.schedules[0].end_min   = 1080;
+    cfg.schedules.schedules[0].enabled   = true;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
-    CHECK(em == NULL);
+    CHECK(em != NULL && strcmp(em, "config apply failed") == 0);
     CHECK(strstr(g_last_log, "import apply failed") != NULL);
     CHECK(g_fan_set_schedule_calls == 1);
     CHECK(g_fopen_calls == 0);
@@ -2699,9 +2760,9 @@ static void test_f_config_import_all_apply_source_add_ds18b20_fails(void)
     cfg.sources.sources[0].ds18b20_rom_code = 0x28ABCDULL;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
-    CHECK(em == NULL);
+    CHECK(em != NULL && strcmp(em, "config apply failed") == 0);
     CHECK(strstr(g_last_log, "import apply failed") != NULL);
     CHECK(g_source_add_ds18b20_calls == 1);
     CHECK(g_fopen_calls == 0);
@@ -2723,9 +2784,9 @@ static void test_f_config_import_all_apply_source_add_fails(void)
     cfg.sources.sources[0].gpio = 34;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
-    CHECK(em == NULL);
+    CHECK(em != NULL && strcmp(em, "config apply failed") == 0);
     CHECK(strstr(g_last_log, "import apply failed") != NULL);
     CHECK(g_source_add_calls == 1);
     CHECK(g_fopen_calls == 0);
@@ -2748,9 +2809,9 @@ static void test_f_config_import_all_apply_source_update_manual_fails(void)
     cfg.sources.sources[0].temp_c = 25.5f;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
-    CHECK(em == NULL);
+    CHECK(em != NULL && strcmp(em, "config apply failed") == 0);
     CHECK(strstr(g_last_log, "import apply failed") != NULL);
     CHECK(g_source_add_calls == 1);
     CHECK(g_source_update_manual_calls == 1);
@@ -2776,9 +2837,9 @@ static void test_f_config_import_all_apply_curve_upsert_fails(void)
     cfg.curves.curves[0].points[1].duty   = 60;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
-    CHECK(em == NULL);
+    CHECK(em != NULL && strcmp(em, "config apply failed") == 0);
     CHECK(strstr(g_last_log, "import apply failed") != NULL);
     CHECK(g_curve_upsert_calls == 1);
     CHECK(g_fopen_calls == 0);
@@ -2804,9 +2865,9 @@ static void test_f_config_import_all_apply_schedule_add_fails(void)
     cfg.schedules.schedules[0].enabled   = true;
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_INVALID_ARG);
-    CHECK(em == NULL);
+    CHECK(em != NULL && strcmp(em, "config apply failed") == 0);
     CHECK(strstr(g_last_log, "import apply failed") != NULL);
     CHECK(g_schedule_add_calls == 1);
     CHECK(g_fopen_calls == 0);
@@ -2825,7 +2886,7 @@ static void test_f_config_import_all_persist_fopen_fails(void)
     build_happy_cfg(&cfg);
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_FAIL);
     CHECK(em == NULL);
     CHECK(strstr(g_last_log, "import apply failed") == NULL);
@@ -2849,7 +2910,7 @@ static void test_f_config_import_all_persist_export_calloc_fails(void)
     build_happy_cfg(&cfg);
 
     esp_err_t err =
-        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, NULL, &cfg, &em);
     CHECK(err == ESP_ERR_NO_MEM);
     CHECK(em == NULL);
     CHECK(strstr(g_last_log, "import apply failed") == NULL);

@@ -6,6 +6,7 @@
 #include "f_source.h"
 #include "f_curve.h"
 #include "f_schedule.h"
+#include "f_gpio.h"
 #include "espfm.pb.h"
 
 #ifdef __cplusplus
@@ -25,11 +26,15 @@ esp_err_t f_config_save_all_forced(f_config_handle_t handle, f_fan_handle_t fan,
 esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan, f_source_handle_t source,
                             f_curve_handle_t curve, f_schedule_handle_t schedule);
 /* Strict import: validate entire ConfigFile, then clear all registries, apply, and force-persist.
- * Returns ESP_ERR_INVALID_ARG on validation failure with *err_msg set. */
+ * gpio is the live f_gpio registry used to reject chip-reserved pins and the active
+ * DS18B20 bus pin before the clear; pass NULL to skip those live-registry checks.
+ * Returns ESP_ERR_INVALID_ARG on validation failure with *err_msg set. On apply failure the
+ * partial apply is re-cleared (empty-but-consistent registries) and *err_msg holds the real
+ * claim/apply error; on persist failure *err_msg stays NULL. */
 esp_err_t f_config_import_all(f_config_handle_t handle, f_fan_handle_t fan,
                               f_source_handle_t source, f_curve_handle_t curve,
-                              f_schedule_handle_t schedule, const ConfigFile *cfg,
-                              const char **err_msg);
+                              f_schedule_handle_t schedule, f_gpio_handle_t gpio,
+                              const ConfigFile *cfg, const char **err_msg);
 
 /* Build a ConfigFile from the four registries (version "3.0"), nanopb-encode it into a newly
  * heap-allocated buffer, and return the buffer and byte length via buf_out/len_out. The caller

@@ -276,6 +276,8 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan, f_sour
 
             f_fan_set_group(fan, new_id, (uint8_t)pb->group_id);
             f_fan_set_inverted(fan, new_id, pb->inverted);
+            /* f_fan_add hard-codes enabled=true; restore the persisted flag at boot too. */
+            f_fan_set_enabled(fan, new_id, pb->enabled);
 
             if (pb->source_id != 0xFF) f_fan_set_source(fan, new_id, (uint8_t)pb->source_id);
             if (pb->curve_id != 0xFF) f_fan_set_curve(fan, new_id, (uint8_t)pb->curve_id);
@@ -356,7 +358,40 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan, f_sour
 /*  Import (strict validate -> clear -> apply -> force-persist)       */
 /* ------------------------------------------------------------------ */
 
-static esp_err_t f_config_validate_import(const ConfigFile *cfg, const char **err_msg)
+/* Reject a GPIO the live registry could not hand out after the config clear:
+   beyond the chip pin table, reserved by the chip pin table (0xFFFFFFFF sentinel),
+   or the active DS18B20 1-Wire bus pin (ONEWIRE claim, not released by the clear).
+   Also rejects a pin used by an earlier device in the same import file. Pins held
+   by the live config registries (PWM/TACH/ADC caps) are deliberately accepted — the
+   clear releases those first, so a re-import of the same pins stays valid. */
+static esp_err_t f_config_validate_gpio(f_gpio_handle_t gpio, uint8_t pin,
+                                        bool pin_used[F_GPIO_MAX_PINS], const char **err_msg)
+{
+    if (pin >= F_GPIO_MAX_PINS) {
+        if (err_msg) *err_msg = "GPIO is out of range";
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (pin_used[pin]) {
+        if (err_msg) *err_msg = "GPIO used by multiple devices";
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (gpio != NULL) {
+        uint32_t caps = f_gpio_get_caps(gpio, pin);
+        if (caps == 0xFFFFFFFF) {
+            if (err_msg) *err_msg = "GPIO is reserved";
+            return ESP_ERR_INVALID_ARG;
+        }
+        if (caps & F_GPIO_CAP_ONEWIRE) {
+            if (err_msg) *err_msg = "GPIO is the active DS18B20 bus pin";
+            return ESP_ERR_INVALID_ARG;
+        }
+    }
+    pin_used[pin] = true;
+    return ESP_OK;
+}
+
+static esp_err_t f_config_validate_import(const ConfigFile *cfg, f_gpio_handle_t gpio,
+                                          const char **err_msg)
 {
     /* Per-registry capacity first. The count guards test whether one more entry can be
      * added (current >= MAX rejects), so passing count - 1 accepts a full list of exactly
@@ -375,6 +410,10 @@ static esp_err_t f_config_validate_import(const ConfigFile *cfg, const char **er
             ESP_OK)
         return ESP_ERR_INVALID_ARG;
 
+    /* Track every GPIO the import file hands out so two devices cannot claim the
+     * same pin (f_gpio_claim would reject the second one after the clear). */
+    bool pin_used[F_GPIO_MAX_PINS] = {false};
+
     /* Fans */
     for (pb_size_t i = 0; i < cfg->fans.fans_count; i++) {
         const FanInfo *pb = &cfg->fans.fans[i];
@@ -382,8 +421,35 @@ static esp_err_t f_config_validate_import(const ConfigFile *cfg, const char **er
         if (pb->tach_gpio != F_FAN_TACH_NONE &&
             f_constraints_gpio((int)pb->tach_gpio, err_msg) != ESP_OK)
             return ESP_ERR_INVALID_ARG;
+        if (pb->tach_gpio != F_FAN_TACH_NONE && pb->pwm_gpio == pb->tach_gpio) {
+            if (err_msg) *err_msg = "pwm and tach cannot use the same GPIO";
+            return ESP_ERR_INVALID_ARG;
+        }
         if (f_constraints_mode((int)pb->mode, err_msg) != ESP_OK) return ESP_ERR_INVALID_ARG;
         if (f_constraints_duty((int)pb->duty, err_msg) != ESP_OK) return ESP_ERR_INVALID_ARG;
+
+        if (f_config_validate_gpio(gpio, (uint8_t)pb->pwm_gpio, pin_used, err_msg) != ESP_OK)
+            return ESP_ERR_INVALID_ARG;
+        if (pb->tach_gpio != F_FAN_TACH_NONE &&
+            f_config_validate_gpio(gpio, (uint8_t)pb->tach_gpio, pin_used, err_msg) != ESP_OK)
+            return ESP_ERR_INVALID_ARG;
+
+        /* Cross-references must resolve against the import file's own counts.
+         * Fans occupy slots 0..fans_count-1 in file order; sources, curves and
+         * schedules likewise, so an out-of-range binding would leave the fan
+         * stuck in failsafe forever. */
+        if (pb->source_id != 0xFF && pb->source_id >= cfg->sources.sources_count) {
+            if (err_msg) *err_msg = "fan references non-existent source";
+            return ESP_ERR_INVALID_ARG;
+        }
+        if (pb->curve_id != 0xFF && pb->curve_id >= cfg->curves.curves_count) {
+            if (err_msg) *err_msg = "fan references non-existent curve";
+            return ESP_ERR_INVALID_ARG;
+        }
+        if (pb->schedule_id != 0xFF && pb->schedule_id >= cfg->schedules.schedules_count) {
+            if (err_msg) *err_msg = "fan references non-existent schedule";
+            return ESP_ERR_INVALID_ARG;
+        }
     }
 
     /* Sources: only NTC sources carry a GPIO; MANUAL/DS18B20 use the 255 sentinel.
@@ -395,6 +461,11 @@ static esp_err_t f_config_validate_import(const ConfigFile *cfg, const char **er
         if (stype == SOURCE_TYPE_NTC && f_constraints_gpio((int)pb->gpio, err_msg) != ESP_OK)
             return ESP_ERR_INVALID_ARG;
         if (stype == SOURCE_TYPE_MANUAL && f_constraints_temp_c(pb->temp_c, err_msg) != ESP_OK)
+            return ESP_ERR_INVALID_ARG;
+        /* NTC sources carry the only per-source GPIO claim; MANUAL and DS18B20
+         * use the 255 sentinel (no claim). */
+        if (stype == SOURCE_TYPE_NTC &&
+            f_config_validate_gpio(gpio, (uint8_t)pb->gpio, pin_used, err_msg) != ESP_OK)
             return ESP_ERR_INVALID_ARG;
     }
 
@@ -446,15 +517,15 @@ static esp_err_t f_config_clear_all(f_fan_handle_t fan, f_source_handle_t source
 
 static esp_err_t f_config_apply_import(f_fan_handle_t fan, f_source_handle_t source,
                                        f_curve_handle_t curve, f_schedule_handle_t schedule,
-                                       const ConfigFile *cfg)
+                                       const ConfigFile *cfg, const char **err_msg)
 {
     /* Fans first: f_fan_add assigns free slots 0..fans_count-1 in file order, which is
      * what the schedule fan_id structural check relies on. */
     for (pb_size_t i = 0; i < cfg->fans.fans_count; i++) {
         const FanInfo *pb = &cfg->fans.fans[i];
         uint8_t new_id;
-        esp_err_t e =
-            f_fan_add(fan, (uint8_t)pb->pwm_gpio, (uint8_t)pb->tach_gpio, pb->name, &new_id, NULL);
+        esp_err_t e = f_fan_add(fan, (uint8_t)pb->pwm_gpio, (uint8_t)pb->tach_gpio, pb->name,
+                                &new_id, err_msg);
         if (e != ESP_OK) return e;
         e = f_fan_set_mode(fan, new_id, (fan_mode_t)pb->mode);
         if (e != ESP_OK) return e;
@@ -463,6 +534,10 @@ static esp_err_t f_config_apply_import(f_fan_handle_t fan, f_source_handle_t sou
         e = f_fan_set_group(fan, new_id, (uint8_t)pb->group_id);
         if (e != ESP_OK) return e;
         e = f_fan_set_inverted(fan, new_id, pb->inverted);
+        if (e != ESP_OK) return e;
+        /* f_fan_add hard-codes enabled=true; restore the persisted flag so a
+         * disabled fan is not silently re-enabled on import. */
+        e = f_fan_set_enabled(fan, new_id, pb->enabled);
         if (e != ESP_OK) return e;
         if (pb->source_id != 0xFF) {
             e = f_fan_set_source(fan, new_id, (uint8_t)pb->source_id);
@@ -487,7 +562,8 @@ static esp_err_t f_config_apply_import(f_fan_handle_t fan, f_source_handle_t sou
             esp_err_t e = f_source_add_ds18b20(source, pb->ds18b20_rom_code, pb->name, &new_id);
             if (e != ESP_OK) return e;
         } else {
-            esp_err_t e = f_source_add(source, stype, (uint8_t)pb->gpio, pb->name, &new_id, NULL);
+            esp_err_t e =
+                f_source_add(source, stype, (uint8_t)pb->gpio, pb->name, &new_id, err_msg);
             if (e != ESP_OK) return e;
             if (stype == SOURCE_TYPE_MANUAL && pb->temp_c != 0.0f) {
                 e = f_source_update_manual(source, new_id, pb->temp_c);
@@ -535,21 +611,27 @@ static esp_err_t f_config_apply_import(f_fan_handle_t fan, f_source_handle_t sou
 
 esp_err_t f_config_import_all(f_config_handle_t handle, f_fan_handle_t fan,
                               f_source_handle_t source, f_curve_handle_t curve,
-                              f_schedule_handle_t schedule, const ConfigFile *cfg,
-                              const char **err_msg)
+                              f_schedule_handle_t schedule, f_gpio_handle_t gpio,
+                              const ConfigFile *cfg, const char **err_msg)
 {
     if (err_msg != NULL) *err_msg = NULL;
     if (handle == NULL || !handle->mounted || cfg == NULL) return ESP_ERR_INVALID_ARG;
 
     /* Strict validate-then-mutate: any invalid entry aborts with zero mutation. */
-    esp_err_t e = f_config_validate_import(cfg, err_msg);
+    esp_err_t e = f_config_validate_import(cfg, gpio, err_msg);
     if (e != ESP_OK) return e;
 
     f_config_clear_all(fan, source, curve, schedule);
 
-    e = f_config_apply_import(fan, source, curve, schedule, cfg);
+    e = f_config_apply_import(fan, source, curve, schedule, cfg, err_msg);
     if (e != ESP_OK) {
         ESP_LOGE(TAG, "import apply failed: %s", esp_err_to_name(e));
+        if (err_msg && *err_msg == NULL) *err_msg = "config apply failed";
+        /* Safety net: the clear already destroyed the old registries, so a failed
+         * apply must not leave a half-applied state. Re-clear so the registries
+         * are empty-but-consistent; the caller schedules the 2s reboot that
+         * reloads the previous config.pb, which was never overwritten. */
+        f_config_clear_all(fan, source, curve, schedule);
         return e;
     }
 
