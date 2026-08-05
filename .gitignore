@@ -97,3 +97,6 @@ tools/espfm_shell.spec
 tools/build/
 tools/dist/
 CONTEXT.md
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+graft/
