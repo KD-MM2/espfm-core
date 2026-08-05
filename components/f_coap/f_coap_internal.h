@@ -23,7 +23,6 @@ extern "C" {
 #define COAP_MAX_SEG     4
 #define COAP_MAX_SEG_LEN 32
 #define COAP_PORT        5683
-#define COAP_MTU         1280
 
 struct f_coap {
     coap_context_t *ctx;

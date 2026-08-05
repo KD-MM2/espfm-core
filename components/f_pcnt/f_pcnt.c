@@ -1,7 +1,6 @@
 #include "f_pcnt.h"
 #include "driver/pulse_cnt.h"
 #include "esp_log.h"
-#include <string.h>
 
 static const char *TAG = "f_pcnt";
 
@@ -9,7 +8,6 @@ struct f_pcnt {
     pcnt_unit_handle_t units[F_PCNT_MAX_UNITS];
     pcnt_channel_handle_t channels[F_PCNT_MAX_UNITS];
     bool unit_in_use[F_PCNT_MAX_UNITS];
-    uint8_t unit_gpio[F_PCNT_MAX_UNITS];
 };
 
 esp_err_t f_pcnt_init(f_pcnt_handle_t *handle)
@@ -66,7 +64,6 @@ esp_err_t f_pcnt_add_input(f_pcnt_handle_t handle, uint8_t gpio, uint8_t *unit_i
     handle->units[slot]       = unit;
     handle->channels[slot]    = chan;
     handle->unit_in_use[slot] = true;
-    handle->unit_gpio[slot]   = gpio;
     *unit_id_out              = (uint8_t)slot;
 
     ESP_LOGI(TAG, "PCNT unit %d added on GPIO %d", slot, gpio);
@@ -112,7 +109,6 @@ esp_err_t f_pcnt_remove_input(f_pcnt_handle_t handle, uint8_t unit_id)
     pcnt_del_unit(handle->units[unit_id]);
     handle->units[unit_id]       = NULL;
     handle->unit_in_use[unit_id] = false;
-    handle->unit_gpio[unit_id]   = 0;
 
     ESP_LOGI(TAG, "PCNT unit %d removed", unit_id);
     return ESP_OK;

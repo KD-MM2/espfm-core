@@ -13,11 +13,7 @@ extern "C" {
 #define ESPFM_VERSION_PATCH 0
 
 /* --- Limits --- */
-#define ESPFM_MAX_FANS      8
-#define ESPFM_MAX_SOURCES   8
-#define ESPFM_MAX_CURVES    16
-#define ESPFM_MAX_SCHEDULES 8
-#define ESPFM_NAME_MAX      16
+#define ESPFM_NAME_MAX 16
 
 /* --- Enums --- */
 typedef enum {

@@ -1133,10 +1133,10 @@ static void test_config_get_success_fully_loaded_passes_full_buffer_for_block2(v
 {
     reset_test_state();
     install_nonnull_handles();
-    g_export_err            = ESP_OK;
-    g_export_buf            = calloc(1, 2500); /* > COAP_MTU 1280, blockwise handoff */
-    g_export_len            = 2500;
-    g_adlr_ret              = 1;
+    g_export_err = ESP_OK;
+    g_export_buf = calloc(1, 2500); /* > 1280-byte CoAP datagram limit, blockwise handoff */
+    g_export_len = 2500;
+    g_adlr_ret   = 1;
     g_adlr_simulate_release = 1; /* wrapper invokes release_func after recording */
 
     static coap_resource_t resource;
