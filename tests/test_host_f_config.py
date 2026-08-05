@@ -109,6 +109,16 @@ ALL_PATHS = [
     "test_f_config_import_all_ntc_source_out_of_range_temp_passes",  # VI-5 (V4)
     "test_f_config_import_all_ds18b20_source_out_of_range_temp_passes",  # VI-6 (V5)
     "test_f_config_import_all_rejects_unknown_type_out_of_range_temp",  # VI-7 (V7)
+    # import-fix (S1/M2/M3): M3 cross-refs, within/between-device GPIO reuse,
+    # live f_gpio registry reserved/ONEWIRE rejection (V-P17..V-P24)
+    "test_f_config_import_all_rejects_fan_missing_source",  # V-P17
+    "test_f_config_import_all_rejects_fan_missing_curve",  # V-P18
+    "test_f_config_import_all_rejects_fan_missing_schedule",  # V-P19
+    "test_f_config_import_all_rejects_pwm_tach_same_gpio",  # V-P20
+    "test_f_config_import_all_rejects_duplicate_gpio_across_devices",  # V-P21
+    "test_f_config_import_all_rejects_live_reserved_gpio",  # V-P22
+    "test_f_config_import_all_rejects_live_onewire_gpio",  # V-P23
+    "test_f_config_import_all_accepts_live_pwm_claimed_gpio",  # V-P24
 ]
 
 
@@ -183,7 +193,7 @@ class TestFConfigHostC(unittest.TestCase):
         self.assertEqual(missing, [], msg="Missing test outputs:\n" + self._summary())
 
     def test_zero_failed_in_summary(self) -> None:
-        self.assertRegex(self.proc.stdout, r"RESULT: 79 passed, 0 failed",
+        self.assertRegex(self.proc.stdout, r"RESULT: 87 passed, 0 failed",
                          msg=self._summary())
 
 

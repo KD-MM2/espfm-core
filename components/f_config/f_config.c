@@ -632,7 +632,11 @@ esp_err_t f_config_import_all(f_config_handle_t handle, f_fan_handle_t fan,
          * are empty-but-consistent; the caller schedules the 2s reboot that
          * reloads the previous config.pb, which was never overwritten. */
         f_config_clear_all(fan, source, curve, schedule);
-        return e;
+        /* Normalize to ESP_FAIL: apply failures re-clear the registries (mutation),
+         * so they must never alias ESP_ERR_INVALID_ARG, which the CoAP caller treats
+         * as "validation failed, zero mutation, no reboot". ESP_FAIL + *err_msg is
+         * the unambiguous "apply failed, reboot to reload the old config" signal. */
+        return ESP_FAIL;
     }
 
     /* Force-persist past the 3s save debounce (the import path reboots shortly after). */

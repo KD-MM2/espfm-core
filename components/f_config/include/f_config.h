@@ -28,9 +28,13 @@ esp_err_t f_config_load_all(f_config_handle_t handle, f_fan_handle_t fan, f_sour
 /* Strict import: validate entire ConfigFile, then clear all registries, apply, and force-persist.
  * gpio is the live f_gpio registry used to reject chip-reserved pins and the active
  * DS18B20 bus pin before the clear; pass NULL to skip those live-registry checks.
- * Returns ESP_ERR_INVALID_ARG on validation failure with *err_msg set. On apply failure the
- * partial apply is re-cleared (empty-but-consistent registries) and *err_msg holds the real
- * claim/apply error; on persist failure *err_msg stays NULL. */
+ * Returns ESP_ERR_INVALID_ARG on validation failure (zero mutation) with *err_msg set.
+ * Returns ESP_FAIL on apply failure: the partial apply is re-cleared (empty-but-consistent
+ * registries) and *err_msg holds the real claim/apply error. The normalized ESP_FAIL (never
+ * ESP_ERR_INVALID_ARG) lets the caller distinguish apply failure from validation failure,
+ * since apply failure mutates state and needs a recovery reboot.
+ * Returns ESP_FAIL on persist failure too; *err_msg stays NULL (the apply fully succeeded,
+ * only the disk write failed — no recovery reboot needed). */
 esp_err_t f_config_import_all(f_config_handle_t handle, f_fan_handle_t fan,
                               f_source_handle_t source, f_curve_handle_t curve,
                               f_schedule_handle_t schedule, f_gpio_handle_t gpio,

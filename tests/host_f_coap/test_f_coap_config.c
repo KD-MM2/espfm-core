@@ -1394,9 +1394,9 @@ static void test_config_post_validation_failure_no_err_msg_returns_400_empty_err
     g_pass++;
 }
 
-/* P5 — import persist/apply failure (any non-ESP_OK, non-INVALID_ARG): 5.00
+/* P5 — import persist failure (err != ESP_OK && err_msg == NULL): 5.00
  * StatusResponse{ok=false, error_code=0, error_msg="persist failed: <name>"};
- * no reboot. */
+ * no reboot. (Apply failure with err_msg set is the P5b branch: 4.00 + reboot.) */
 static void test_config_post_persist_failure_returns_500(void)
 {
     static uint8_t body[ConfigFile_size];
@@ -1432,6 +1432,56 @@ static void test_config_post_persist_failure_returns_500(void)
     CHECK(strcmp(sr.error_msg, "persist failed: ESP_FAIL") == 0);
     CHECK(g_etso_calls == 0);
     CHECK(s_reboot_pending == false);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* P5b — apply failure (err != ESP_OK && err_msg != NULL): 4.00
+ * StatusResponse{ok=false, error_code=err, error_msg=<real claim/apply error>},
+ * and the recovery reboot IS scheduled so the previous config.pb reloads
+ * instead of the device running the re-cleared (empty) registries. */
+static void test_config_post_apply_failure_returns_400_and_reboots(void)
+{
+    static uint8_t body[ConfigFile_size];
+    size_t n = build_body_nonempty(body, sizeof(body));
+    CHECK(n > 0);
+
+    reset_test_state();
+    install_nonnull_handles();
+    g_fake_h.config  = (f_config_handle_t)0x1;
+    g_import_err     = ESP_FAIL; /* normalized apply failure from f_config_import_all */
+    g_import_err_msg = "config apply failed";
+    g_e2n            = "ESP_FAIL";
+    g_cgd_ret        = 1;
+    g_cgd_len        = n;
+    g_cgd_data       = body;
+    s_reboot_pending = false;
+    s_reboot_timer   = NULL;
+    g_etc_ret        = ESP_OK;
+    g_etc_out_handle = (esp_timer_handle_t)0x1234;
+    g_etso_ret       = ESP_OK;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_config_post(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_import_calls == 1);
+    CHECK(g_last_code == COAP_RESPONSE_CODE_BAD_REQUEST); /* not 5.00 */
+    CHECK(g_cad_calls == 1);
+    StatusResponse sr;
+    memset(&sr, 0, sizeof(sr));
+    CHECK(decode_status(&sr));
+    CHECK(sr.ok == false);
+    CHECK(sr.error_code == (uint32_t)ESP_FAIL); /* real error encoded, not 0 */
+    CHECK(strcmp(sr.error_msg, "config apply failed") == 0);
+    CHECK(g_etc_calls == 1); /* reboot timer created + started */
+    CHECK(g_etso_calls == 1);
+    CHECK(g_etso_timeout_us == 2000000);
+    CHECK(s_reboot_pending == true); /* recovery reboot scheduled */
     printf("  [PASS] %s\n", __func__);
     g_pass++;
 }
@@ -2957,6 +3007,7 @@ int main(void)
     test_config_post_validation_failure_returns_400_with_error_msg();         /* P3 */
     test_config_post_validation_failure_no_err_msg_returns_400_empty_error(); /* P4 */
     test_config_post_persist_failure_returns_500();                           /* P5 */
+    test_config_post_apply_failure_returns_400_and_reboots();                 /* P5b */
     test_config_post_success_schedules_reboot_timer_created();                /* P6 */
     test_config_post_success_reuses_existing_timer();                         /* P7 */
     test_config_post_success_timer_start_failure_no_pending();                /* P8 */

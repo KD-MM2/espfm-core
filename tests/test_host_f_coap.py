@@ -48,6 +48,7 @@ ALL_PATHS = [
     "test_config_post_validation_failure_returns_400_with_error_msg",  # P3
     "test_config_post_validation_failure_no_err_msg_returns_400_empty_error",  # P4
     "test_config_post_persist_failure_returns_500",  # P5
+    "test_config_post_apply_failure_returns_400_and_reboots",  # P5b (import-fix M1)
     "test_config_post_success_schedules_reboot_timer_created",  # P6
     "test_config_post_success_reuses_existing_timer",  # P7
     "test_config_post_success_timer_start_failure_no_pending",  # P8
@@ -171,7 +172,7 @@ class TestFCoapConfigHostC(unittest.TestCase):
         self.assertEqual(missing, [], msg="Missing test outputs:\n" + self._summary())
 
     def test_zero_failed_in_summary(self) -> None:
-        self.assertRegex(self.proc.stdout, r"RESULT: 57 passed, 0 failed",
+        self.assertRegex(self.proc.stdout, r"RESULT: 58 passed, 0 failed",
                          msg=self._summary())
 
 
