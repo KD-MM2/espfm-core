@@ -6,6 +6,7 @@
 #include "f_curve.h"
 #include "f_schedule.h"
 #include "f_config.h"
+#include "f_control.h"
 #include "f_mdns.h"
 #include "f_ds18b20.h"
 #include <coap3/coap.h>
@@ -39,6 +40,7 @@ struct f_coap {
     f_mdns_handle_t mdns;
     f_ds18b20_handle_t *ds18b20_ref;
     f_gpio_handle_t gpio;
+    f_control_handle_t control;
 };
 
 void f_coap_register_resources(coap_context_t *ctx, struct f_coap *h);

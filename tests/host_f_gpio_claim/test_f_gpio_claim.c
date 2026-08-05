@@ -891,6 +891,76 @@ static void test_fan_remove_with_tach_releases_both(void)
 }
 
 /* ================================================================
+ * f_fan_set_alarm tests (P1-P5)
+ * ================================================================ */
+
+/* Callback used by the re-entrant test: re-takes the recursive mutex from
+ * inside f_fan_for_each (which already holds it) to prove no deadlock. */
+static void set_alarm_in_cb(const f_fan_info_t *fi, void *ctx)
+{
+    (void)ctx;
+    CHECK(f_fan_set_alarm(g_fan, fi->id, FAN_ALARM_STALL) == ESP_OK);
+}
+
+/* P1 — NULL handle rejected: INVALID_ARG, mutex NOT taken (guard precedes). */
+static void test_fan_set_alarm_null_handle_returns_invalid_arg(void)
+{
+    reset_test_state();
+    CHECK(f_fan_set_alarm(NULL, 0, FAN_ALARM_STALL) == ESP_ERR_INVALID_ARG);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* P2 — id out of range rejected: INVALID_ARG, mutex NOT taken. */
+static void test_fan_set_alarm_id_out_of_range_returns_invalid_arg(void)
+{
+    reset_test_state();
+    CHECK(f_fan_set_alarm(g_fan, F_FAN_MAX_COUNT, FAN_ALARM_STALL) == ESP_ERR_INVALID_ARG);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* P3 — unused slot rejected: NOT_FOUND, channels[id].alarm unchanged. */
+static void test_fan_set_alarm_unused_slot_returns_not_found(void)
+{
+    reset_test_state();
+    CHECK(f_fan_set_alarm(g_fan, 0, FAN_ALARM_STALL) == ESP_ERR_NOT_FOUND);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* P4 — happy path: valid write persists into the fan registry. */
+static void test_fan_set_alarm_success_writes_alarm(void)
+{
+    reset_test_state();
+    uint8_t id;
+    CHECK(f_fan_add(g_fan, 15, 4, "f0", &id, NULL) == ESP_OK);
+    CHECK(f_fan_set_alarm(g_fan, id, FAN_ALARM_OVERTEMP) == ESP_OK);
+    f_fan_info_t fi;
+    memset(&fi, 0, sizeof(fi));
+    CHECK(f_fan_get_info(g_fan, id, &fi) == ESP_OK);
+    CHECK(fi.alarm == FAN_ALARM_OVERTEMP);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* P5 — re-entrant call safe: called from inside f_fan_for_each (recursive
+ * mutex already held by the same task); no deadlock, alarm written. */
+static void test_fan_set_alarm_reentrant_under_mutex_ok(void)
+{
+    reset_test_state();
+    uint8_t id;
+    CHECK(f_fan_add(g_fan, 15, 4, "f0", &id, NULL) == ESP_OK);
+    CHECK(f_fan_for_each(g_fan, set_alarm_in_cb, NULL) == ESP_OK);
+    f_fan_info_t fi;
+    memset(&fi, 0, sizeof(fi));
+    CHECK(f_fan_get_info(g_fan, id, &fi) == ESP_OK);
+    CHECK(fi.alarm == FAN_ALARM_STALL);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* ================================================================
  * f_source_add tests (SA-P1..P8)
  * ================================================================ */
 
@@ -1379,6 +1449,13 @@ int main(void)
     test_fan_remove_unused_slot_returns_not_found(); /* FR-P2 */
     test_fan_remove_no_tach_releases_pwm();          /* FR-P3 */
     test_fan_remove_with_tach_releases_both();       /* FR-P4 */
+
+    /* f_fan_set_alarm */
+    test_fan_set_alarm_null_handle_returns_invalid_arg();     /* P1 */
+    test_fan_set_alarm_id_out_of_range_returns_invalid_arg(); /* P2 */
+    test_fan_set_alarm_unused_slot_returns_not_found();       /* P3 */
+    test_fan_set_alarm_success_writes_alarm();                /* P4 */
+    test_fan_set_alarm_reentrant_under_mutex_ok();            /* P5 */
 
     /* f_source_add */
     test_source_add_null_args_returns_invalid_arg();           /* SA-P1 */

@@ -6,8 +6,9 @@ bus-level claim in f_ds18b20_init.
 
 Compiles the REAL f_fan.c, f_source.c, f_gpio.c, f_ds18b20.c and
 f_constraints.c against stubbed ESP-IDF layers (see tests/host_f_gpio_claim/)
-and runs the 56-path harness. Requires WSL (Ubuntu-24.04) with gcc + GNU ld;
-the repo has no native Windows host C toolchain.
+and runs the 73-path harness (68 gpio/constr paths + 5 f_fan_set_alarm
+paths from ctrl phase-3). Requires WSL (Ubuntu-24.04) with gcc + GNU ld; the
+repo has no native Windows host C toolchain.
 
 Usage:
     python tests/test_host_f_gpio_claim.py
@@ -26,10 +27,10 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOST_DIR = os.path.join(REPO_ROOT, "tests", "host_f_gpio_claim")
 WSL_DISTRO = "Ubuntu-24.04"
 
-# All 68 EPA execution paths (gpio phases 2-5: f_fan_add / f_fan_set_gpio /
+# All 73 EPA execution paths (gpio phases 2-5: f_fan_add / f_fan_set_gpio /
 # f_fan_remove / f_source_add / f_source_remove / f_ds18b20_init +
-# constr phase-1: f_source_update_manual / f_constraints_temp_c), by test
-# function name.
+# constr phase-1: f_source_update_manual / f_constraints_temp_c +
+# ctrl phase-3: f_fan_set_alarm), by test function name.
 ALL_PATHS = [
     # f_fan_add (FA-P1..P13)
     "test_fan_add_null_args_returns_invalid_arg",  # FA-P1
@@ -71,6 +72,12 @@ ALL_PATHS = [
     "test_fan_remove_unused_slot_returns_not_found",  # FR-P2
     "test_fan_remove_no_tach_releases_pwm",  # FR-P3
     "test_fan_remove_with_tach_releases_both",  # FR-P4
+    # f_fan_set_alarm (P1-P5) — ctrl phase-3 alarm persistence
+    "test_fan_set_alarm_null_handle_returns_invalid_arg",  # P1
+    "test_fan_set_alarm_id_out_of_range_returns_invalid_arg",  # P2
+    "test_fan_set_alarm_unused_slot_returns_not_found",  # P3
+    "test_fan_set_alarm_success_writes_alarm",  # P4
+    "test_fan_set_alarm_reentrant_under_mutex_ok",  # P5
     # f_source_add (SA-P1..P8)
     "test_source_add_null_args_returns_invalid_arg",  # SA-P1
     "test_source_add_registry_full_returns_no_mem",  # SA-P2
@@ -160,7 +167,7 @@ if not _WSL_AVAILABLE:
 
 @unittest.skipUnless(_WSL_AVAILABLE, f"WSL distro {WSL_DISTRO} not available")
 class TestFGPIOClaimHostC(unittest.TestCase):
-    """Runs the compiled f_gpio_claim C harness and asserts all 68 paths pass."""
+    """Runs the compiled f_gpio_claim C harness and asserts all 73 paths pass."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -181,7 +188,7 @@ class TestFGPIOClaimHostC(unittest.TestCase):
         self.assertEqual(missing, [], msg="Missing test outputs:\n" + self._summary())
 
     def test_zero_failed_in_summary(self) -> None:
-        self.assertRegex(self.proc.stdout, r"RESULT: 68 passed, 0 failed",
+        self.assertRegex(self.proc.stdout, r"RESULT: 73 passed, 0 failed",
                          msg=self._summary())
 
 

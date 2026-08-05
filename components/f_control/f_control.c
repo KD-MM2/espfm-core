@@ -84,6 +84,7 @@ static void _ctrl_callback(const f_fan_info_t *fan, void *ctx)
         } else if (new_alarm == FAN_ALARM_NONE && ctrl->prev_alarm[fan->id] != FAN_ALARM_NONE) {
             esp_event_post(ESPFM_EVENT, ESPFM_EVENT_FAN_ALARM_CLEAR, NULL, 0, 0);
         }
+        f_fan_set_alarm(ctrl->fan, fan->id, new_alarm);
         ctrl->prev_alarm[fan->id] = new_alarm;
         return;
     }
@@ -141,6 +142,7 @@ check_alarm:
     } else if (new_alarm == FAN_ALARM_NONE && ctrl->prev_alarm[fan->id] != FAN_ALARM_NONE) {
         esp_event_post(ESPFM_EVENT, ESPFM_EVENT_FAN_ALARM_CLEAR, NULL, 0, 0);
     }
+    f_fan_set_alarm(ctrl->fan, fan->id, new_alarm);
     ctrl->prev_alarm[fan->id] = new_alarm;
 }
 
@@ -229,14 +231,6 @@ esp_err_t f_control_start(f_control_handle_t handle)
     return ESP_OK;
 }
 
-esp_err_t f_control_stop(f_control_handle_t handle)
-{
-    if (handle == NULL) return ESP_ERR_INVALID_ARG;
-    handle->running = false;
-    /* Task will exit on next loop iteration */
-    return ESP_OK;
-}
-
 esp_err_t f_control_set_hysteresis(f_control_handle_t handle, uint8_t threshold_pct)
 {
     if (handle == NULL || threshold_pct > 100) return ESP_ERR_INVALID_ARG;
@@ -259,5 +253,21 @@ esp_err_t f_control_set_failsafe(f_control_handle_t handle, failsafe_policy_t po
     if (handle == NULL) return ESP_ERR_INVALID_ARG;
     handle->failsafe_policy = policy;
     if (safe_duty <= 100) handle->failsafe_safe_duty = safe_duty;
+    return ESP_OK;
+}
+
+esp_err_t f_control_get_tunables(f_control_handle_t handle, uint8_t *hysteresis_pct,
+                                 uint8_t *ramp_up_pct, uint8_t *ramp_down_pct,
+                                 failsafe_policy_t *failsafe_policy, uint8_t *failsafe_safe_duty)
+{
+    if (handle == NULL || hysteresis_pct == NULL || ramp_up_pct == NULL || ramp_down_pct == NULL ||
+        failsafe_policy == NULL || failsafe_safe_duty == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *hysteresis_pct     = handle->hysteresis_pct;
+    *ramp_up_pct        = handle->ramp_up_pct;
+    *ramp_down_pct      = handle->ramp_down_pct;
+    *failsafe_policy    = handle->failsafe_policy;
+    *failsafe_safe_duty = handle->failsafe_safe_duty;
     return ESP_OK;
 }

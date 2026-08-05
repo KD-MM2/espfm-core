@@ -27,6 +27,7 @@ INCS="$INCS -I$SRC/f_config/include"
 INCS="$INCS -I$SRC/f_mdns/include"
 INCS="$INCS -I$SRC/f_ds18b20/include"
 INCS="$INCS -I$SRC/f_gpio/include"
+INCS="$INCS -I$SRC/f_control/include"
 INCS="$INCS -I$SRC/f_constraints/include"
 INCS="$INCS -I$SRC/f_schema"
 INCS="$INCS -I$SRC/f_schema/include"
@@ -50,6 +51,9 @@ WRAPS="$WRAPS -Wl,--wrap=f_fan_set_inverted -Wl,--wrap=f_fan_set_enabled -Wl,--w
 WRAPS="$WRAPS -Wl,--wrap=f_fan_remove"
 WRAPS="$WRAPS -Wl,--wrap=f_source_add -Wl,--wrap=f_source_add_ds18b20 -Wl,--wrap=f_source_get_info"
 WRAPS="$WRAPS -Wl,--wrap=f_source_update_manual -Wl,--wrap=f_source_remove"
+# control tunables handlers (ctrl phase-5): getter + the three setters
+WRAPS="$WRAPS -Wl,--wrap=f_control_get_tunables -Wl,--wrap=f_control_set_hysteresis"
+WRAPS="$WRAPS -Wl,--wrap=f_control_set_ramp_rates -Wl,--wrap=f_control_set_failsafe"
 
 echo "==> Compiling f_coap host test harness"
 "$CC" -std=gnu11 -O0 -fno-builtin -ffunction-sections -fdata-sections \

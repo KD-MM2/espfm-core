@@ -26,6 +26,7 @@ def run_host_unit_tests():
             "test_host_f_config",
             "test_host_f_coap",
             "test_host_f_gpio_claim",
+            "test_host_f_control",
         ]
     )
     runner = unittest.TextTestRunner(verbosity=2)

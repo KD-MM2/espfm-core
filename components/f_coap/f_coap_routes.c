@@ -1061,6 +1061,138 @@ static void handle_config_get(coap_resource_t *resource, coap_session_t *session
 }
 
 /* ------------------------------------------------------------------ */
+/*  Control tunables handler: /control                                 */
+/* ------------------------------------------------------------------ */
+
+static void handle_control_get(coap_resource_t *resource, coap_session_t *session,
+                               const coap_pdu_t *req, const coap_string_t *query, coap_pdu_t *resp)
+{
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
+    if (h->control == NULL) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE);
+        return;
+    }
+
+    uint8_t hyst, up, down, safe_duty;
+    failsafe_policy_t policy;
+    if (f_control_get_tunables(h->control, &hyst, &up, &down, &policy, &safe_duty) != ESP_OK) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_INTERNAL_ERROR);
+        return;
+    }
+
+    static ControlConfig cc;
+    cc                     = (ControlConfig)ControlConfig_init_default;
+    cc.has_hysteresis      = true;
+    cc.hysteresis          = hyst;
+    cc.has_ramp_up         = true;
+    cc.ramp_up             = up;
+    cc.has_ramp_down       = true;
+    cc.ramp_down           = down;
+    cc.has_failsafe_policy = true;
+    cc.failsafe_policy     = (FailsafePolicy)policy;
+    cc.has_safe_duty       = true;
+    cc.safe_duty           = safe_duty;
+    encode_response(resp, COAP_RESPONSE_CODE_CONTENT, &cc, &ControlConfig_msg);
+}
+
+static void handle_control_put(coap_resource_t *resource, coap_session_t *session,
+                               const coap_pdu_t *req, const coap_string_t *query, coap_pdu_t *resp)
+{
+    struct f_coap *h = (struct f_coap *)coap_resource_get_userdata(resource);
+    if (h->control == NULL) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE);
+        return;
+    }
+
+    static ControlConfig cc;
+    cc = (ControlConfig)ControlConfig_init_default;
+    if (!decode_request(req, &cc, &ControlConfig_msg)) {
+        static StatusResponse sr;
+        sr            = (StatusResponse)StatusResponse_init_default;
+        sr.ok         = false;
+        sr.error_code = (uint32_t)ESP_ERR_INVALID_ARG;
+        snprintf(sr.error_msg, sizeof(sr.error_msg), "decode failed");
+        encode_response(resp, COAP_RESPONSE_CODE_BAD_REQUEST, &sr, &StatusResponse_msg);
+        return;
+    }
+
+    /* Merge partial updates against current values so omitted fields are preserved */
+    uint8_t hyst, up, down, safe_duty;
+    failsafe_policy_t policy;
+    if (f_control_get_tunables(h->control, &hyst, &up, &down, &policy, &safe_duty) != ESP_OK) {
+        coap_pdu_set_code(resp, COAP_RESPONSE_CODE_INTERNAL_ERROR);
+        return;
+    }
+
+    if (cc.has_hysteresis && cc.hysteresis > 100) {
+        static StatusResponse sr;
+        sr            = (StatusResponse)StatusResponse_init_default;
+        sr.ok         = false;
+        sr.error_code = (uint32_t)ESP_ERR_INVALID_ARG;
+        snprintf(sr.error_msg, sizeof(sr.error_msg), "hysteresis out of range");
+        encode_response(resp, COAP_RESPONSE_CODE_BAD_REQUEST, &sr, &StatusResponse_msg);
+        return;
+    }
+    if (cc.has_hysteresis) hyst = (uint8_t)cc.hysteresis;
+
+    if (cc.has_ramp_up && cc.ramp_up > 100) {
+        static StatusResponse sr;
+        sr            = (StatusResponse)StatusResponse_init_default;
+        sr.ok         = false;
+        sr.error_code = (uint32_t)ESP_ERR_INVALID_ARG;
+        snprintf(sr.error_msg, sizeof(sr.error_msg), "ramp_up out of range");
+        encode_response(resp, COAP_RESPONSE_CODE_BAD_REQUEST, &sr, &StatusResponse_msg);
+        return;
+    }
+    if (cc.has_ramp_up) up = (uint8_t)cc.ramp_up;
+
+    if (cc.has_ramp_down && cc.ramp_down > 100) {
+        static StatusResponse sr;
+        sr            = (StatusResponse)StatusResponse_init_default;
+        sr.ok         = false;
+        sr.error_code = (uint32_t)ESP_ERR_INVALID_ARG;
+        snprintf(sr.error_msg, sizeof(sr.error_msg), "ramp_down out of range");
+        encode_response(resp, COAP_RESPONSE_CODE_BAD_REQUEST, &sr, &StatusResponse_msg);
+        return;
+    }
+    if (cc.has_ramp_down) down = (uint8_t)cc.ramp_down;
+
+    if (cc.has_failsafe_policy && (cc.failsafe_policy < FailsafePolicy_FAILSAFE_HOLD ||
+                                   cc.failsafe_policy > FailsafePolicy_FAILSAFE_ALT_SOURCE)) {
+        static StatusResponse sr;
+        sr            = (StatusResponse)StatusResponse_init_default;
+        sr.ok         = false;
+        sr.error_code = (uint32_t)ESP_ERR_INVALID_ARG;
+        snprintf(sr.error_msg, sizeof(sr.error_msg), "invalid failsafe policy");
+        encode_response(resp, COAP_RESPONSE_CODE_BAD_REQUEST, &sr, &StatusResponse_msg);
+        return;
+    }
+    if (cc.has_failsafe_policy) policy = (failsafe_policy_t)cc.failsafe_policy;
+
+    if (cc.has_safe_duty && cc.safe_duty > 100) {
+        static StatusResponse sr;
+        sr            = (StatusResponse)StatusResponse_init_default;
+        sr.ok         = false;
+        sr.error_code = (uint32_t)ESP_ERR_INVALID_ARG;
+        snprintf(sr.error_msg, sizeof(sr.error_msg), "safe_duty out of range");
+        encode_response(resp, COAP_RESPONSE_CODE_BAD_REQUEST, &sr, &StatusResponse_msg);
+        return;
+    }
+    if (cc.has_safe_duty) safe_duty = (uint8_t)cc.safe_duty;
+
+    /* Apply through the existing setters using the merged values */
+    if (cc.has_hysteresis) f_control_set_hysteresis(h->control, hyst);
+    if (cc.has_ramp_up || cc.has_ramp_down) f_control_set_ramp_rates(h->control, up, down);
+    if (cc.has_failsafe_policy || cc.has_safe_duty)
+        f_control_set_failsafe(h->control, policy, safe_duty);
+
+    static StatusResponse sr;
+    sr    = (StatusResponse)StatusResponse_init_default;
+    sr.ok = true;
+    encode_response(resp, COAP_RESPONSE_CODE_CHANGED, &sr, &StatusResponse_msg);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Resource registration                                              */
 /*  libcoap matches by exact URI path.  Register every path the       */
 /*  shell sends, including sub-paths like /system/info, /wifi/scan.   */
@@ -1097,6 +1229,9 @@ void f_coap_register_resources(coap_context_t *ctx, struct f_coap *h)
 
     /* /config — export (GET) and import (POST) all configuration */
     add_resource(ctx, h, "config", handle_config_get, handle_config_post, NULL, NULL);
+
+    /* /control — control-loop tunables: get (GET), update (PUT) */
+    add_resource(ctx, h, "control", handle_control_get, NULL, handle_control_put, NULL);
 
     /* Sub-paths for {resource}/{id} — register for IDs 0..7 */
     for (int i = 0; i < 8; i++) {

@@ -101,9 +101,14 @@ void app_main(void)
     f_mdns_handle_t mdns;
     ESP_ERROR_CHECK(f_mdns_init(&mdns));
 
+    /* --- Control Engine (init before CoAP so f_coap can receive the handle) --- */
+    f_control_handle_t control;
+    ESP_ERROR_CHECK(f_control_init(&control, fan, source, curve));
+
     /* --- CoAP Server (UDP :5683, Protobuf, WiFi-aware lifecycle) --- */
     f_coap_handle_t coap;
-    ESP_ERROR_CHECK(f_coap_init(&coap, fan, source, curve, schedule, config, mdns, &ds18b20, gpio));
+    ESP_ERROR_CHECK(
+        f_coap_init(&coap, fan, source, curve, schedule, config, mdns, &ds18b20, gpio, control));
 
     /* --- WiFi Provisioning (captive portal on STA failure) --- */
     f_provision_handle_t provision;
@@ -113,9 +118,7 @@ void app_main(void)
     ESP_LOGI(TAG, "Waiting for WiFi...");
     f_wifi_wait_connected(wifi, pdMS_TO_TICKS(30000));
 
-    /* --- Control Engine --- */
-    f_control_handle_t control;
-    ESP_ERROR_CHECK(f_control_init(&control, fan, source, curve));
+    /* --- Control Engine (start once WiFi is up) --- */
     ESP_ERROR_CHECK(f_control_start(control));
 
     /* --- Schedule Service --- */

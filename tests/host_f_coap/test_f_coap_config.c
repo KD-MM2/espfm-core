@@ -117,7 +117,7 @@ static uint8_t g_cad_data[StatusResponse_size]; /* captured body bytes (copied) 
 
 /* --- fan/source claim-wiring CoAP handler hooks (gpio phases 2-5) --- */
 
-static int g_config_save_all_calls;      /* f_config_save_all invocations (save_config) */
+static int g_config_save_all_calls; /* f_config_save_all invocations (save_config) */
 static f_config_handle_t g_config_save_handle;
 static f_fan_handle_t g_config_save_fan;
 static f_source_handle_t g_config_save_source;
@@ -163,6 +163,26 @@ static f_source_info_t g_source_info; /* configurable info returned by f_source_
 
 static int g_update_manual_calls;
 static esp_err_t g_update_manual_err;
+
+/* --- control tunables handler hooks (ctrl phase-5) --- */
+
+static esp_err_t g_ctrl_get_err;             /* f_control_get_tunables return value */
+static int g_ctrl_get_calls;                 /* number of f_control_get_tunables calls */
+static f_control_handle_t g_ctrl_get_handle; /* recorded handle arg */
+static uint8_t g_ctrl_get_hyst;              /* current hysteresis returned by getter */
+static uint8_t g_ctrl_get_up;                /* current ramp_up returned by getter */
+static uint8_t g_ctrl_get_down;              /* current ramp_down returned by getter */
+static failsafe_policy_t g_ctrl_get_policy;  /* current policy returned by getter */
+static uint8_t g_ctrl_get_safe_duty;         /* current safe_duty returned by getter */
+
+static int g_set_hyst_calls;                    /* f_control_set_hysteresis invocations */
+static uint8_t g_set_hyst_arg;                  /* recorded hysteresis arg */
+static int g_set_ramp_calls;                    /* f_control_set_ramp_rates invocations */
+static uint8_t g_set_ramp_up;                   /* recorded ramp_up arg */
+static uint8_t g_set_ramp_down;                 /* recorded ramp_down arg */
+static int g_set_failsafe_calls;                /* f_control_set_failsafe invocations */
+static failsafe_policy_t g_set_failsafe_policy; /* recorded policy arg */
+static uint8_t g_set_failsafe_duty;             /* recorded safe_duty arg */
 
 static coap_string_t g_uri_path_string; /* path returned by coap_get_uri_path */
 
@@ -514,8 +534,8 @@ esp_err_t __wrap_f_source_add(f_source_handle_t handle, source_type_t type, uint
     return ESP_OK;
 }
 
-esp_err_t __wrap_f_source_add_ds18b20(f_source_handle_t handle, uint64_t rom_code,
-                                      const char *name, uint8_t *id_out)
+esp_err_t __wrap_f_source_add_ds18b20(f_source_handle_t handle, uint64_t rom_code, const char *name,
+                                      uint8_t *id_out)
 {
     (void)rom_code;
     (void)name;
@@ -549,6 +569,48 @@ esp_err_t __wrap_f_source_remove(f_source_handle_t handle, uint8_t id)
 {
     (void)handle;
     (void)id;
+    return ESP_OK;
+}
+
+/* ---- control tunables wraps (ctrl phase-5) ---- */
+
+esp_err_t __wrap_f_control_get_tunables(f_control_handle_t handle, uint8_t *h, uint8_t *u,
+                                        uint8_t *d, failsafe_policy_t *p, uint8_t *s)
+{
+    g_ctrl_get_calls++;
+    g_ctrl_get_handle = handle;
+    if (g_ctrl_get_err != ESP_OK) return g_ctrl_get_err;
+    if (h) *h = g_ctrl_get_hyst;
+    if (u) *u = g_ctrl_get_up;
+    if (d) *d = g_ctrl_get_down;
+    if (p) *p = g_ctrl_get_policy;
+    if (s) *s = g_ctrl_get_safe_duty;
+    return ESP_OK;
+}
+
+esp_err_t __wrap_f_control_set_hysteresis(f_control_handle_t h, uint8_t v)
+{
+    (void)h;
+    g_set_hyst_calls++;
+    g_set_hyst_arg = v;
+    return ESP_OK;
+}
+
+esp_err_t __wrap_f_control_set_ramp_rates(f_control_handle_t h, uint8_t u, uint8_t d)
+{
+    (void)h;
+    g_set_ramp_calls++;
+    g_set_ramp_up   = u;
+    g_set_ramp_down = d;
+    return ESP_OK;
+}
+
+esp_err_t __wrap_f_control_set_failsafe(f_control_handle_t h, failsafe_policy_t p, uint8_t d)
+{
+    (void)h;
+    g_set_failsafe_calls++;
+    g_set_failsafe_policy = p;
+    g_set_failsafe_duty   = d;
     return ESP_OK;
 }
 
@@ -641,34 +703,34 @@ static void reset_test_state(void)
     g_config_save_fan       = NULL;
     g_config_save_source    = NULL;
 
-    g_fan_add_calls     = 0;
-    g_fan_add_err       = ESP_OK;
-    g_fan_add_err_msg   = NULL;
-    g_fan_add_pwm       = 0;
-    g_fan_add_tach      = 0;
-    g_fan_add_name[0]   = '\0';
+    g_fan_add_calls         = 0;
+    g_fan_add_err           = ESP_OK;
+    g_fan_add_err_msg       = NULL;
+    g_fan_add_pwm           = 0;
+    g_fan_add_tach          = 0;
+    g_fan_add_name[0]       = '\0';
 
-    g_set_gpio_calls   = 0;
-    g_set_gpio_err     = ESP_OK;
-    g_set_gpio_err_msg = NULL;
-    g_set_gpio_pwm     = 0;
-    g_set_gpio_tach    = 0;
+    g_set_gpio_calls        = 0;
+    g_set_gpio_err          = ESP_OK;
+    g_set_gpio_err_msg      = NULL;
+    g_set_gpio_pwm          = 0;
+    g_set_gpio_tach         = 0;
 
-    g_fan_get_info_calls = 0;
-    g_get_info_err       = ESP_OK;
+    g_fan_get_info_calls    = 0;
+    g_get_info_err          = ESP_OK;
     memset(&g_fan_info, 0, sizeof(g_fan_info));
-    g_fan_info.tach_gpio = 0xFF; /* default: no tach */
-    g_fan_info.enabled   = true;
+    g_fan_info.tach_gpio       = 0xFF; /* default: no tach */
+    g_fan_info.enabled         = true;
 
-    g_fan_set_name_calls     = 0;
-    g_fan_set_mode_calls     = 0;
-    g_fan_set_duty_calls     = 0;
-    g_fan_set_source_calls   = 0;
-    g_fan_set_curve_calls    = 0;
-    g_fan_set_schedule_calls = 0;
-    g_fan_set_group_calls    = 0;
-    g_fan_set_inverted_calls = 0;
-    g_fan_set_enabled_calls  = 0;
+    g_fan_set_name_calls       = 0;
+    g_fan_set_mode_calls       = 0;
+    g_fan_set_duty_calls       = 0;
+    g_fan_set_source_calls     = 0;
+    g_fan_set_curve_calls      = 0;
+    g_fan_set_schedule_calls   = 0;
+    g_fan_set_group_calls      = 0;
+    g_fan_set_inverted_calls   = 0;
+    g_fan_set_enabled_calls    = 0;
 
     g_source_add_calls         = 0;
     g_source_add_err           = ESP_OK;
@@ -680,9 +742,28 @@ static void reset_test_state(void)
     g_source_get_info_calls    = 0;
     memset(&g_source_info, 0, sizeof(g_source_info));
     strcpy(g_source_info.name, "s0");
-    g_source_info.type = SOURCE_TYPE_MANUAL;
+    g_source_info.type    = SOURCE_TYPE_MANUAL;
     g_update_manual_calls = 0;
     g_update_manual_err   = ESP_OK;
+
+    /* control tunables handler hooks */
+    g_ctrl_get_err        = ESP_OK;
+    g_ctrl_get_calls      = 0;
+    g_ctrl_get_handle     = NULL;
+    g_ctrl_get_hyst       = 3;  /* match f_control_init DEFAULT_HYSTERESIS */
+    g_ctrl_get_up         = 10; /* match f_control_init DEFAULT_RAMP_UP */
+    g_ctrl_get_down       = 3;  /* match f_control_init DEFAULT_RAMP_DOWN */
+    g_ctrl_get_policy     = FAILSAFE_HOLD;
+    g_ctrl_get_safe_duty  = 50; /* match f_control_init DEFAULT_SAFE_DUTY */
+
+    g_set_hyst_calls      = 0;
+    g_set_hyst_arg        = 0;
+    g_set_ramp_calls      = 0;
+    g_set_ramp_up         = 0;
+    g_set_ramp_down       = 0;
+    g_set_failsafe_calls  = 0;
+    g_set_failsafe_policy = FAILSAFE_HOLD;
+    g_set_failsafe_duty   = 0;
 
     memset(&g_uri_path_string, 0, sizeof(g_uri_path_string));
 
@@ -733,6 +814,7 @@ static void install_nonnull_handles(void)
     g_fake_h.source   = H_SRC;
     g_fake_h.curve    = H_CUR;
     g_fake_h.schedule = H_SCH;
+    g_fake_h.control  = (f_control_handle_t)0xABC;
 }
 
 /* Decode the captured response body (g_cad_data/g_cad_len) as a StatusResponse. */
@@ -845,6 +927,34 @@ static bool decode_source_info(SourceInfo *out)
 {
     pb_istream_t is = pb_istream_from_buffer(g_cad_data, g_cad_len);
     return pb_decode(&is, &SourceInfo_msg, out);
+}
+
+/* ---- control tunables handler helpers (ctrl phase-5) ---- */
+
+/* Encode a ControlConfig PUT body with per-field presence flags. */
+static size_t build_control_req(uint8_t *buf, size_t bufsz, bool h_hyst, uint32_t hyst, bool h_up,
+                                uint32_t up, bool h_down, uint32_t down, bool h_pol,
+                                FailsafePolicy pol, bool h_duty, uint32_t duty)
+{
+    ControlConfig cc       = ControlConfig_init_default;
+    cc.has_hysteresis      = h_hyst;
+    cc.hysteresis          = hyst;
+    cc.has_ramp_up         = h_up;
+    cc.ramp_up             = up;
+    cc.has_ramp_down       = h_down;
+    cc.ramp_down           = down;
+    cc.has_failsafe_policy = h_pol;
+    cc.failsafe_policy     = pol;
+    cc.has_safe_duty       = h_duty;
+    cc.safe_duty           = duty;
+    return encode_req(&ControlConfig_msg, &cc, buf, bufsz);
+}
+
+/* Decode the captured response body (g_cad_data/g_cad_len) as ControlConfig. */
+static bool decode_control(ControlConfig *out)
+{
+    pb_istream_t is = pb_istream_from_buffer(g_cad_data, g_cad_len);
+    return pb_decode(&is, &ControlConfig_msg, out);
 }
 
 /* ================================================================
@@ -1583,12 +1693,12 @@ static void test_fan_post_add_failure_returns_400_with_error_msg(void)
 
     reset_test_state();
     install_nonnull_handles();
-    g_fake_h.config  = (f_config_handle_t)0x1;
-    g_fan_add_err    = ESP_ERR_INVALID_STATE;
+    g_fake_h.config   = (f_config_handle_t)0x1;
+    g_fan_add_err     = ESP_ERR_INVALID_STATE;
     g_fan_add_err_msg = "GPIO 15 already in use by PWM";
-    g_cgd_ret        = 1;
-    g_cgd_len        = n;
-    g_cgd_data       = body;
+    g_cgd_ret         = 1;
+    g_cgd_len         = n;
+    g_cgd_data        = body;
 
     static coap_resource_t resource;
     static coap_session_t session;
@@ -1621,11 +1731,11 @@ static void test_fan_post_add_failure_no_err_msg_returns_400_empty_error(void)
     size_t n = build_fan_create_req(body, sizeof(body), 15, 0xFF, "f", false, 0);
     CHECK(n > 0);
 
-    reset_test_state(); /* g_fake_h.fan stays NULL */
-    g_fan_add_err      = ESP_ERR_INVALID_ARG; /* stub null-guards, no msg written */
-    g_cgd_ret          = 1;
-    g_cgd_len          = n;
-    g_cgd_data         = body;
+    reset_test_state();                  /* g_fake_h.fan stays NULL */
+    g_fan_add_err = ESP_ERR_INVALID_ARG; /* stub null-guards, no msg written */
+    g_cgd_ret     = 1;
+    g_cgd_len     = n;
+    g_cgd_data    = body;
 
     static coap_resource_t resource;
     static coap_session_t session;
@@ -1775,13 +1885,13 @@ static void test_fan_put_no_gpio_fields_skips_set_gpio(void)
 
     reset_test_state();
     install_nonnull_handles();
-    g_fake_h.config  = (f_config_handle_t)0x1;
+    g_fake_h.config = (f_config_handle_t)0x1;
     set_uri_path("/fans/0");
-    g_get_info_err   = ESP_OK;
-    g_fan_info.duty  = 50;
-    g_cgd_ret        = 1;
-    g_cgd_len        = n;
-    g_cgd_data       = body;
+    g_get_info_err  = ESP_OK;
+    g_fan_info.duty = 50;
+    g_cgd_ret       = 1;
+    g_cgd_len       = n;
+    g_cgd_data      = body;
 
     static coap_resource_t resource;
     static coap_session_t session;
@@ -1814,11 +1924,11 @@ static void test_fan_put_gpio_update_success_returns_204(void)
     install_nonnull_handles();
     g_fake_h.config = (f_config_handle_t)0x1;
     set_uri_path("/fans/0");
-    g_get_info_err  = ESP_OK; /* g_fan_info default: pwm 15, tach 0xFF */
-    g_set_gpio_err  = ESP_OK;
-    g_cgd_ret       = 1;
-    g_cgd_len       = n;
-    g_cgd_data      = body;
+    g_get_info_err = ESP_OK; /* g_fan_info default: pwm 15, tach 0xFF */
+    g_set_gpio_err = ESP_OK;
+    g_cgd_ret      = 1;
+    g_cgd_len      = n;
+    g_cgd_data     = body;
 
     static coap_resource_t resource;
     static coap_session_t session;
@@ -1846,14 +1956,14 @@ static void test_fan_put_gpio_update_failure_returns_400_with_error_msg_no_save(
 
     reset_test_state();
     install_nonnull_handles();
-    g_fake_h.config   = (f_config_handle_t)0x1;
+    g_fake_h.config = (f_config_handle_t)0x1;
     set_uri_path("/fans/0");
-    g_get_info_err    = ESP_OK;
-    g_set_gpio_err    = ESP_ERR_INVALID_STATE;
+    g_get_info_err     = ESP_OK;
+    g_set_gpio_err     = ESP_ERR_INVALID_STATE;
     g_set_gpio_err_msg = "GPIO 20 already in use by ADC";
-    g_cgd_ret         = 1;
-    g_cgd_len         = n;
-    g_cgd_data        = body;
+    g_cgd_ret          = 1;
+    g_cgd_len          = n;
+    g_cgd_data         = body;
 
     static coap_resource_t resource;
     static coap_session_t session;
@@ -1885,13 +1995,13 @@ static void test_fan_put_gpio_update_failure_no_err_msg_returns_400_empty_error(
     CHECK(n > 0);
 
     reset_test_state(); /* g_fake_h.fan stays NULL */
-    g_fake_h.config  = (f_config_handle_t)0x1;
+    g_fake_h.config = (f_config_handle_t)0x1;
     set_uri_path("/fans/0");
-    g_get_info_err   = ESP_OK; /* stub returns info even with NULL fan */
-    g_set_gpio_err   = ESP_ERR_INVALID_ARG; /* stub null-guards, no msg */
-    g_cgd_ret        = 1;
-    g_cgd_len        = n;
-    g_cgd_data       = body;
+    g_get_info_err = ESP_OK;              /* stub returns info even with NULL fan */
+    g_set_gpio_err = ESP_ERR_INVALID_ARG; /* stub null-guards, no msg */
+    g_cgd_ret      = 1;
+    g_cgd_len      = n;
+    g_cgd_data     = body;
 
     static coap_resource_t resource;
     static coap_session_t session;
@@ -1976,11 +2086,11 @@ static void test_source_post_temp_update_failure_returns_400(void)
     reset_test_state();
     install_nonnull_handles();
     set_uri_path("/sources/temp");
-    g_get_info_err     = ESP_OK;
+    g_get_info_err      = ESP_OK;
     g_update_manual_err = ESP_ERR_INVALID_ARG;
-    g_cgd_ret          = 1;
-    g_cgd_len          = n;
-    g_cgd_data         = body;
+    g_cgd_ret           = 1;
+    g_cgd_len           = n;
+    g_cgd_data          = body;
 
     static coap_resource_t resource;
     static coap_session_t session;
@@ -2057,8 +2167,8 @@ static void test_source_post_create_decode_failure_returns_400(void)
 static void test_source_post_ds18b20_add_failure_returns_400_no_status_body(void)
 {
     static uint8_t body[SourceCreateRequest_size];
-    size_t n = build_source_create_req(body, sizeof(body), SourceType_SOURCE_TYPE_DS18B20, 0,
-                                       0x1234, "d");
+    size_t n =
+        build_source_create_req(body, sizeof(body), SourceType_SOURCE_TYPE_DS18B20, 0, 0x1234, "d");
     CHECK(n > 0);
 
     reset_test_state();
@@ -2088,8 +2198,8 @@ static void test_source_post_ds18b20_add_failure_returns_400_no_status_body(void
 static void test_source_post_ds18b20_add_success_returns_201(void)
 {
     static uint8_t body[SourceCreateRequest_size];
-    size_t n = build_source_create_req(body, sizeof(body), SourceType_SOURCE_TYPE_DS18B20, 0,
-                                       0x1234, "d");
+    size_t n =
+        build_source_create_req(body, sizeof(body), SourceType_SOURCE_TYPE_DS18B20, 0, 0x1234, "d");
     CHECK(n > 0);
 
     reset_test_state();
@@ -2132,13 +2242,13 @@ static void test_source_post_ntc_add_failure_returns_400_with_error_msg(void)
 
     reset_test_state();
     install_nonnull_handles();
-    g_fake_h.config    = (f_config_handle_t)0x1;
+    g_fake_h.config = (f_config_handle_t)0x1;
     set_uri_path("/sources");
-    g_source_add_err   = ESP_ERR_INVALID_STATE;
+    g_source_add_err     = ESP_ERR_INVALID_STATE;
     g_source_add_err_msg = "GPIO 15 already in use by PWM";
-    g_cgd_ret          = 1;
-    g_cgd_len          = n;
-    g_cgd_data         = body;
+    g_cgd_ret            = 1;
+    g_cgd_len            = n;
+    g_cgd_data           = body;
 
     static coap_resource_t resource;
     static coap_session_t session;
@@ -2202,8 +2312,8 @@ static void test_source_post_ntc_add_failure_no_err_msg_returns_400_empty_error(
 static void test_source_post_manual_add_success_returns_201(void)
 {
     static uint8_t body[SourceCreateRequest_size];
-    size_t n = build_source_create_req(body, sizeof(body), SourceType_SOURCE_TYPE_MANUAL, 15, 0,
-                                       "s");
+    size_t n =
+        build_source_create_req(body, sizeof(body), SourceType_SOURCE_TYPE_MANUAL, 15, 0, "s");
     CHECK(n > 0);
 
     reset_test_state();
@@ -2239,6 +2349,590 @@ static void test_source_post_manual_add_success_returns_201(void)
 }
 
 /* ================================================================
+ * handle_control_get tests (HCG-P1..P3)
+ * ================================================================ */
+
+/* HCG-P1 — h->control == NULL: 5.03, getter NOT called, no body. */
+static void test_control_get_null_control_returns_503(void)
+{
+    reset_test_state(); /* g_fake_h.control stays NULL */
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_get(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE);
+    CHECK(g_ctrl_get_calls == 0);
+    CHECK(g_cad_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCG-P2 — getter error: 5.00, no body. */
+static void test_control_get_tunables_failure_returns_500(void)
+{
+    reset_test_state();
+    install_nonnull_handles();
+    g_ctrl_get_err = ESP_FAIL;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_get(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_ctrl_get_calls == 1);
+    CHECK(g_last_code == COAP_RESPONSE_CODE_INTERNAL_ERROR);
+    CHECK(g_cad_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCG-P3 — happy path: 2.05 with all five fields, presence flags true. */
+static void test_control_get_success_returns_205_all_fields(void)
+{
+    reset_test_state();
+    install_nonnull_handles();
+    g_ctrl_get_err       = ESP_OK;
+    g_ctrl_get_hyst      = 5;
+    g_ctrl_get_up        = 15;
+    g_ctrl_get_down      = 20;
+    g_ctrl_get_policy    = FAILSAFE_FULL_SPEED;
+    g_ctrl_get_safe_duty = 70;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_get(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_ctrl_get_calls == 1);
+    CHECK(g_ctrl_get_handle == g_fake_h.control);
+    CHECK(g_last_code == COAP_RESPONSE_CODE_CONTENT);
+    CHECK(g_cad_calls == 1);
+    ControlConfig cc;
+    memset(&cc, 0, sizeof(cc));
+    CHECK(decode_control(&cc));
+    CHECK(cc.has_hysteresis && cc.hysteresis == 5);
+    CHECK(cc.has_ramp_up && cc.ramp_up == 15);
+    CHECK(cc.has_ramp_down && cc.ramp_down == 20);
+    CHECK(cc.has_failsafe_policy && cc.failsafe_policy == FailsafePolicy_FAILSAFE_FULL_SPEED);
+    CHECK(cc.has_safe_duty && cc.safe_duty == 70);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* ================================================================
+ * handle_control_put tests (HCP-P1..P15)
+ * ================================================================ */
+
+/* HCP-P1 — h->control == NULL: 5.03, coap_get_data NOT called, no body. */
+static void test_control_put_null_control_returns_503(void)
+{
+    reset_test_state(); /* g_fake_h.control stays NULL */
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE);
+    CHECK(g_cgd_calls == 0);
+    CHECK(g_cad_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCP-P2 — decode failure (no body OR malformed protobuf): 4.00
+ * StatusResponse{ok:false, error_code:INVALID_ARG, error_msg:"decode failed"};
+ * getter and setters never reached. */
+static void test_control_put_decode_failure_returns_400_decode_failed(void)
+{
+    /* Sub-case (a): coap_get_data returns 0 — no body at all. */
+    reset_test_state();
+    install_nonnull_handles();
+    g_cgd_ret = 0;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_BAD_REQUEST);
+    CHECK(g_cad_calls == 1);
+    StatusResponse sr;
+    memset(&sr, 0, sizeof(sr));
+    CHECK(decode_status(&sr));
+    CHECK(sr.ok == false);
+    CHECK(sr.error_code == (uint32_t)ESP_ERR_INVALID_ARG);
+    CHECK(strcmp(sr.error_msg, "decode failed") == 0);
+    CHECK(g_ctrl_get_calls == 0);
+    CHECK(g_set_hyst_calls == 0 && g_set_ramp_calls == 0 && g_set_failsafe_calls == 0);
+
+    /* Sub-case (b): malformed/truncated protobuf body (pb_decode false). */
+    reset_test_state();
+    install_nonnull_handles();
+    static const uint8_t malformed[5] = {0x0A, 0xFF, 0xFF, 0xFF, 0xFF};
+    g_cgd_ret                         = 1;
+    g_cgd_len                         = sizeof(malformed);
+    g_cgd_data                        = malformed;
+
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_BAD_REQUEST);
+    CHECK(g_cad_calls == 1);
+    memset(&sr, 0, sizeof(sr));
+    CHECK(decode_status(&sr));
+    CHECK(sr.ok == false);
+    CHECK(strcmp(sr.error_msg, "decode failed") == 0);
+    CHECK(g_ctrl_get_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCP-P3 — merge-base getter error: 5.00, no body, no setter. */
+static void test_control_put_merge_base_failure_returns_500(void)
+{
+    static uint8_t body[ControlConfig_size];
+    size_t n =
+        build_control_req(body, sizeof(body), true, 5, false, 0, false, 0, false, 0, false, 0);
+    CHECK(n > 0);
+
+    reset_test_state();
+    install_nonnull_handles();
+    g_ctrl_get_err = ESP_FAIL;
+    g_cgd_ret      = 1;
+    g_cgd_len      = n;
+    g_cgd_data     = body;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_INTERNAL_ERROR);
+    CHECK(g_cad_calls == 0);
+    CHECK(g_set_hyst_calls == 0 && g_set_ramp_calls == 0 && g_set_failsafe_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCP-P4 — hysteresis > 100: 4.00 "hysteresis out of range", no setter ran. */
+static void test_control_put_hysteresis_oob_returns_400(void)
+{
+    static uint8_t body[ControlConfig_size];
+    size_t n =
+        build_control_req(body, sizeof(body), true, 101, false, 0, false, 0, false, 0, false, 0);
+    CHECK(n > 0);
+
+    reset_test_state();
+    install_nonnull_handles();
+    g_cgd_ret  = 1;
+    g_cgd_len  = n;
+    g_cgd_data = body;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_BAD_REQUEST);
+    CHECK(g_cad_calls == 1);
+    StatusResponse sr;
+    memset(&sr, 0, sizeof(sr));
+    CHECK(decode_status(&sr));
+    CHECK(sr.ok == false);
+    CHECK(strcmp(sr.error_msg, "hysteresis out of range") == 0);
+    CHECK(g_set_hyst_calls == 0 && g_set_ramp_calls == 0 && g_set_failsafe_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCP-P5 — ramp_up > 100: 4.00 "ramp_up out of range", no setter ran. */
+static void test_control_put_ramp_up_oob_returns_400(void)
+{
+    static uint8_t body[ControlConfig_size];
+    size_t n =
+        build_control_req(body, sizeof(body), false, 0, true, 101, false, 0, false, 0, false, 0);
+    CHECK(n > 0);
+
+    reset_test_state();
+    install_nonnull_handles();
+    g_cgd_ret  = 1;
+    g_cgd_len  = n;
+    g_cgd_data = body;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_BAD_REQUEST);
+    CHECK(g_cad_calls == 1);
+    StatusResponse sr;
+    memset(&sr, 0, sizeof(sr));
+    CHECK(decode_status(&sr));
+    CHECK(sr.ok == false);
+    CHECK(strcmp(sr.error_msg, "ramp_up out of range") == 0);
+    CHECK(g_set_hyst_calls == 0 && g_set_ramp_calls == 0 && g_set_failsafe_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCP-P6 — ramp_down > 100: 4.00 "ramp_down out of range", no setter ran. */
+static void test_control_put_ramp_down_oob_returns_400(void)
+{
+    static uint8_t body[ControlConfig_size];
+    size_t n =
+        build_control_req(body, sizeof(body), false, 0, false, 0, true, 101, false, 0, false, 0);
+    CHECK(n > 0);
+
+    reset_test_state();
+    install_nonnull_handles();
+    g_cgd_ret  = 1;
+    g_cgd_len  = n;
+    g_cgd_data = body;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_BAD_REQUEST);
+    CHECK(g_cad_calls == 1);
+    StatusResponse sr;
+    memset(&sr, 0, sizeof(sr));
+    CHECK(decode_status(&sr));
+    CHECK(sr.ok == false);
+    CHECK(strcmp(sr.error_msg, "ramp_down out of range") == 0);
+    CHECK(g_set_hyst_calls == 0 && g_set_ramp_calls == 0 && g_set_failsafe_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCP-P7 — failsafe_policy outside enum 0-3: 4.00 "invalid failsafe policy". */
+static void test_control_put_failsafe_policy_oob_returns_400(void)
+{
+    static uint8_t body[ControlConfig_size];
+    size_t n = build_control_req(body, sizeof(body), false, 0, false, 0, false, 0, true,
+                                 (FailsafePolicy)4, false, 0);
+    CHECK(n > 0);
+
+    reset_test_state();
+    install_nonnull_handles();
+    g_cgd_ret  = 1;
+    g_cgd_len  = n;
+    g_cgd_data = body;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_BAD_REQUEST);
+    CHECK(g_cad_calls == 1);
+    StatusResponse sr;
+    memset(&sr, 0, sizeof(sr));
+    CHECK(decode_status(&sr));
+    CHECK(sr.ok == false);
+    CHECK(strcmp(sr.error_msg, "invalid failsafe policy") == 0);
+    CHECK(g_set_hyst_calls == 0 && g_set_ramp_calls == 0 && g_set_failsafe_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCP-P8 — safe_duty > 100: 4.00 "safe_duty out of range", no setter ran. */
+static void test_control_put_safe_duty_oob_returns_400(void)
+{
+    static uint8_t body[ControlConfig_size];
+    size_t n =
+        build_control_req(body, sizeof(body), false, 0, false, 0, false, 0, false, 0, true, 101);
+    CHECK(n > 0);
+
+    reset_test_state();
+    install_nonnull_handles();
+    g_cgd_ret  = 1;
+    g_cgd_len  = n;
+    g_cgd_data = body;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_BAD_REQUEST);
+    CHECK(g_cad_calls == 1);
+    StatusResponse sr;
+    memset(&sr, 0, sizeof(sr));
+    CHECK(decode_status(&sr));
+    CHECK(sr.ok == false);
+    CHECK(strcmp(sr.error_msg, "safe_duty out of range") == 0);
+    CHECK(g_set_hyst_calls == 0 && g_set_ramp_calls == 0 && g_set_failsafe_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCP-P9 — all five fields present + valid: 2.04 ok, all three setters once. */
+static void test_control_put_all_fields_success_returns_204(void)
+{
+    static uint8_t body[ControlConfig_size];
+    size_t n = build_control_req(body, sizeof(body), true, 5, true, 15, true, 20, true,
+                                 (FailsafePolicy)2, true, 70);
+    CHECK(n > 0);
+
+    reset_test_state();
+    install_nonnull_handles();
+    g_cgd_ret  = 1;
+    g_cgd_len  = n;
+    g_cgd_data = body;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_CHANGED);
+    CHECK(g_cad_calls == 1);
+    StatusResponse sr;
+    memset(&sr, 0, sizeof(sr));
+    CHECK(decode_status(&sr));
+    CHECK(sr.ok == true);
+    CHECK(g_set_hyst_calls == 1 && g_set_hyst_arg == 5);
+    CHECK(g_set_ramp_calls == 1 && g_set_ramp_up == 15 && g_set_ramp_down == 20);
+    CHECK(g_set_failsafe_calls == 1 && g_set_failsafe_policy == FAILSAFE_SAFE_DUTY &&
+          g_set_failsafe_duty == 70);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCP-P10 — only hysteresis present: only set_hysteresis called with request. */
+static void test_control_put_partial_hysteresis_only(void)
+{
+    static uint8_t body[ControlConfig_size];
+    size_t n =
+        build_control_req(body, sizeof(body), true, 7, false, 0, false, 0, false, 0, false, 0);
+    CHECK(n > 0);
+
+    reset_test_state();
+    install_nonnull_handles(); /* getter defaults: hyst=3, up=10, down=3, HOLD, 50 */
+    g_cgd_ret  = 1;
+    g_cgd_len  = n;
+    g_cgd_data = body;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_CHANGED);
+    CHECK(g_cad_calls == 1);
+    StatusResponse sr;
+    memset(&sr, 0, sizeof(sr));
+    CHECK(decode_status(&sr));
+    CHECK(sr.ok == true);
+    CHECK(g_set_hyst_calls == 1 && g_set_hyst_arg == 7);
+    CHECK(g_set_ramp_calls == 0);
+    CHECK(g_set_failsafe_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCP-P11 — only ramp_up present: set_ramp_rates(request up, current getter down). */
+static void test_control_put_partial_ramp_up_only(void)
+{
+    static uint8_t body[ControlConfig_size];
+    size_t n =
+        build_control_req(body, sizeof(body), false, 0, true, 25, false, 0, false, 0, false, 0);
+    CHECK(n > 0);
+
+    reset_test_state();
+    install_nonnull_handles(); /* getter down = 3 */
+    g_cgd_ret  = 1;
+    g_cgd_len  = n;
+    g_cgd_data = body;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_CHANGED);
+    CHECK(g_cad_calls == 1);
+    CHECK(g_set_ramp_calls == 1 && g_set_ramp_up == 25 && g_set_ramp_down == 3);
+    CHECK(g_set_hyst_calls == 0);
+    CHECK(g_set_failsafe_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCP-P12 — only ramp_down present: set_ramp_rates(current getter up, request down). */
+static void test_control_put_partial_ramp_down_only(void)
+{
+    static uint8_t body[ControlConfig_size];
+    size_t n =
+        build_control_req(body, sizeof(body), false, 0, false, 0, true, 30, false, 0, false, 0);
+    CHECK(n > 0);
+
+    reset_test_state();
+    install_nonnull_handles(); /* getter up = 10 */
+    g_cgd_ret  = 1;
+    g_cgd_len  = n;
+    g_cgd_data = body;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_CHANGED);
+    CHECK(g_cad_calls == 1);
+    CHECK(g_set_ramp_calls == 1 && g_set_ramp_up == 10 && g_set_ramp_down == 30);
+    CHECK(g_set_hyst_calls == 0);
+    CHECK(g_set_failsafe_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCP-P13 — only failsafe_policy present: set_failsafe(request policy, current duty). */
+static void test_control_put_partial_failsafe_policy_only(void)
+{
+    static uint8_t body[ControlConfig_size];
+    size_t n = build_control_req(body, sizeof(body), false, 0, false, 0, false, 0, true,
+                                 (FailsafePolicy)1, false, 0);
+    CHECK(n > 0);
+
+    reset_test_state();
+    install_nonnull_handles(); /* getter safe_duty = 50 */
+    g_cgd_ret  = 1;
+    g_cgd_len  = n;
+    g_cgd_data = body;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_CHANGED);
+    CHECK(g_cad_calls == 1);
+    CHECK(g_set_failsafe_calls == 1 && g_set_failsafe_policy == FAILSAFE_FULL_SPEED &&
+          g_set_failsafe_duty == 50);
+    CHECK(g_set_hyst_calls == 0);
+    CHECK(g_set_ramp_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCP-P14 — only safe_duty present: set_failsafe(current getter policy, request duty). */
+static void test_control_put_partial_safe_duty_only(void)
+{
+    static uint8_t body[ControlConfig_size];
+    size_t n =
+        build_control_req(body, sizeof(body), false, 0, false, 0, false, 0, false, 0, true, 60);
+    CHECK(n > 0);
+
+    reset_test_state();
+    install_nonnull_handles(); /* getter policy = FAILSAFE_HOLD */
+    g_cgd_ret  = 1;
+    g_cgd_len  = n;
+    g_cgd_data = body;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_CHANGED);
+    CHECK(g_cad_calls == 1);
+    CHECK(g_set_failsafe_calls == 1 && g_set_failsafe_policy == FAILSAFE_HOLD &&
+          g_set_failsafe_duty == 60);
+    CHECK(g_set_hyst_calls == 0);
+    CHECK(g_set_ramp_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* HCP-P15 — body with only unrecognized fields decodes OK but has no has_*:
+ * 2.04 no-op, no setter called. */
+static void test_control_put_no_fields_noop_returns_204(void)
+{
+    static const uint8_t unknown_field[3] = {0x98, 0x06, 0x01}; /* field 99, varint 1 */
+
+    reset_test_state();
+    install_nonnull_handles();
+    g_cgd_ret  = 1;
+    g_cgd_len  = sizeof(unknown_field);
+    g_cgd_data = unknown_field;
+
+    static coap_resource_t resource;
+    static coap_session_t session;
+    static coap_pdu_t req;
+    static coap_string_t query;
+    static coap_pdu_t resp;
+    setup_endpoints(&resource, &session, &req, &query, &resp);
+    handle_control_put(&resource, &session, &req, &query, &resp);
+
+    CHECK(g_last_code == COAP_RESPONSE_CODE_CHANGED);
+    CHECK(g_cad_calls == 1);
+    StatusResponse sr;
+    memset(&sr, 0, sizeof(sr));
+    CHECK(decode_status(&sr));
+    CHECK(sr.ok == true);
+    CHECK(g_set_hyst_calls == 0 && g_set_ramp_calls == 0 && g_set_failsafe_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* ================================================================
  * main
  * ================================================================ */
 
@@ -2265,31 +2959,53 @@ int main(void)
     test_config_post_success_empty_config_clears_and_reboots();               /* P10 */
 
     /* handle_fan_post (gpio phases 2-5) */
-    test_fan_post_decode_failure_returns_400();                               /* HFP-P1 */
-    test_fan_post_add_failure_returns_400_with_error_msg();                   /* HFP-P2 */
-    test_fan_post_add_failure_no_err_msg_returns_400_empty_error();           /* HFP-P3 */
-    test_fan_post_success_returns_201_fan_info();                             /* HFP-P4 */
+    test_fan_post_decode_failure_returns_400();                     /* HFP-P1 */
+    test_fan_post_add_failure_returns_400_with_error_msg();         /* HFP-P2 */
+    test_fan_post_add_failure_no_err_msg_returns_400_empty_error(); /* HFP-P3 */
+    test_fan_post_success_returns_201_fan_info();                   /* HFP-P4 */
 
     /* handle_fan_put (gpio phases 2-5) */
-    test_fan_put_short_path_returns_404();                                    /* HFU-P1 */
-    test_fan_put_decode_failure_returns_400();                                /* HFU-P2 */
-    test_fan_put_fan_not_found_returns_404();                                 /* HFU-P3 */
-    test_fan_put_no_gpio_fields_skips_set_gpio();                             /* HFU-P4 */
-    test_fan_put_gpio_update_success_returns_204();                           /* HFU-P5 */
-    test_fan_put_gpio_update_failure_returns_400_with_error_msg_no_save();    /* HFU-P6 */
-    test_fan_put_gpio_update_failure_no_err_msg_returns_400_empty_error();    /* HFU-P7 */
+    test_fan_put_short_path_returns_404();                                 /* HFU-P1 */
+    test_fan_put_decode_failure_returns_400();                             /* HFU-P2 */
+    test_fan_put_fan_not_found_returns_404();                              /* HFU-P3 */
+    test_fan_put_no_gpio_fields_skips_set_gpio();                          /* HFU-P4 */
+    test_fan_put_gpio_update_success_returns_204();                        /* HFU-P5 */
+    test_fan_put_gpio_update_failure_returns_400_with_error_msg_no_save(); /* HFU-P6 */
+    test_fan_put_gpio_update_failure_no_err_msg_returns_400_empty_error(); /* HFU-P7 */
 
     /* handle_source_post (gpio phases 2-5) */
-    test_source_post_temp_decode_failure_returns_400();                       /* HSP-P1 */
-    test_source_post_temp_source_not_found_returns_404();                     /* HSP-P2 */
-    test_source_post_temp_update_failure_returns_400();                       /* HSP-P3 */
-    test_source_post_temp_success_returns_204_ok();                           /* HSP-P4 */
-    test_source_post_create_decode_failure_returns_400();                     /* HSP-P5 */
-    test_source_post_ds18b20_add_failure_returns_400_no_status_body();        /* HSP-P6 */
-    test_source_post_ds18b20_add_success_returns_201();                       /* HSP-P7 */
-    test_source_post_ntc_add_failure_returns_400_with_error_msg();            /* HSP-P8 */
-    test_source_post_ntc_add_failure_no_err_msg_returns_400_empty_error();    /* HSP-P9 */
-    test_source_post_manual_add_success_returns_201();                        /* HSP-P10 */
+    test_source_post_temp_decode_failure_returns_400();                    /* HSP-P1 */
+    test_source_post_temp_source_not_found_returns_404();                  /* HSP-P2 */
+    test_source_post_temp_update_failure_returns_400();                    /* HSP-P3 */
+    test_source_post_temp_success_returns_204_ok();                        /* HSP-P4 */
+    test_source_post_create_decode_failure_returns_400();                  /* HSP-P5 */
+    test_source_post_ds18b20_add_failure_returns_400_no_status_body();     /* HSP-P6 */
+    test_source_post_ds18b20_add_success_returns_201();                    /* HSP-P7 */
+    test_source_post_ntc_add_failure_returns_400_with_error_msg();         /* HSP-P8 */
+    test_source_post_ntc_add_failure_no_err_msg_returns_400_empty_error(); /* HSP-P9 */
+    test_source_post_manual_add_success_returns_201();                     /* HSP-P10 */
+
+    /* handle_control_get (ctrl phase-5) */
+    test_control_get_null_control_returns_503();       /* HCG-P1 */
+    test_control_get_tunables_failure_returns_500();   /* HCG-P2 */
+    test_control_get_success_returns_205_all_fields(); /* HCG-P3 */
+
+    /* handle_control_put (ctrl phase-5) */
+    test_control_put_null_control_returns_503();                 /* HCP-P1 */
+    test_control_put_decode_failure_returns_400_decode_failed(); /* HCP-P2 */
+    test_control_put_merge_base_failure_returns_500();           /* HCP-P3 */
+    test_control_put_hysteresis_oob_returns_400();               /* HCP-P4 */
+    test_control_put_ramp_up_oob_returns_400();                  /* HCP-P5 */
+    test_control_put_ramp_down_oob_returns_400();                /* HCP-P6 */
+    test_control_put_failsafe_policy_oob_returns_400();          /* HCP-P7 */
+    test_control_put_safe_duty_oob_returns_400();                /* HCP-P8 */
+    test_control_put_all_fields_success_returns_204();           /* HCP-P9 */
+    test_control_put_partial_hysteresis_only();                  /* HCP-P10 */
+    test_control_put_partial_ramp_up_only();                     /* HCP-P11 */
+    test_control_put_partial_ramp_down_only();                   /* HCP-P12 */
+    test_control_put_partial_failsafe_policy_only();             /* HCP-P13 */
+    test_control_put_partial_safe_duty_only();                   /* HCP-P14 */
+    test_control_put_no_fields_noop_returns_204();               /* HCP-P15 */
 
     printf("\nRESULT: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;

@@ -47,6 +47,7 @@ esp_err_t f_fan_set_schedule(f_fan_handle_t handle, uint8_t id, uint8_t schedule
 esp_err_t f_fan_set_enabled(f_fan_handle_t handle, uint8_t id, bool enabled);
 esp_err_t f_fan_set_inverted(f_fan_handle_t handle, uint8_t id, bool inverted);
 esp_err_t f_fan_set_group(f_fan_handle_t handle, uint8_t id, uint8_t group_id);
+esp_err_t f_fan_set_alarm(f_fan_handle_t handle, uint8_t id, fan_alarm_t alarm);
 esp_err_t f_fan_set_gpio(f_fan_handle_t handle, uint8_t id, uint8_t new_pwm_gpio,
                          uint8_t new_tach_gpio, const char **err_msg);
 esp_err_t f_fan_update_rpm(f_fan_handle_t handle, uint8_t id);

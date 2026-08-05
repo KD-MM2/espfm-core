@@ -5,10 +5,10 @@ Host-based C unit tests for handle_config_get / coap_free_config_data
 components/f_coap/f_coap_routes.c.
 
 Compiles the real f_coap_routes.c (`static` demoted) against stubbed ESP-IDF
-layers + a fake coap3/coap.h (see tests/host_f_coap/) and runs the 39-path
-harness (18 config-handler paths + 21 gpio claim-wiring handler paths).
-Requires WSL (Ubuntu-24.04) with gcc + GNU ld; the repo has no native
-Windows host C toolchain.
+layers + a fake coap3/coap.h (see tests/host_f_coap/) and runs the 57-path
+harness (18 config-handler paths + 21 gpio claim-wiring handler paths + 18
+control-tunables handler paths from ctrl phase-5). Requires WSL (Ubuntu-24.04)
+with gcc + GNU ld; the repo has no native Windows host C toolchain.
 
 Usage:
     python tests/test_host_f_coap.py
@@ -31,6 +31,7 @@ WSL_DISTRO = "Ubuntu-24.04"
 #   spec-01 phase-3 (GET + release callback): P1-P8
 #   spec-02 phase-4 (POST /config import handler): P1-P10
 #   gpio phases 2-5 (handle_fan_post/handle_fan_put/handle_source_post): HFP/HFU/HSP
+#   ctrl phase-5 (handle_control_get/handle_control_put): HCG/HCP
 ALL_PATHS = [
     # handle_config_get / coap_free_config_data (spec-01 phase-3)
     "test_config_get_export_failure_returns_500",  # P1
@@ -76,6 +77,26 @@ ALL_PATHS = [
     "test_source_post_ntc_add_failure_returns_400_with_error_msg",  # HSP-P8
     "test_source_post_ntc_add_failure_no_err_msg_returns_400_empty_error",  # HSP-P9
     "test_source_post_manual_add_success_returns_201",  # HSP-P10
+    # handle_control_get (ctrl phase-5)
+    "test_control_get_null_control_returns_503",  # HCG-P1
+    "test_control_get_tunables_failure_returns_500",  # HCG-P2
+    "test_control_get_success_returns_205_all_fields",  # HCG-P3
+    # handle_control_put (ctrl phase-5)
+    "test_control_put_null_control_returns_503",  # HCP-P1
+    "test_control_put_decode_failure_returns_400_decode_failed",  # HCP-P2
+    "test_control_put_merge_base_failure_returns_500",  # HCP-P3
+    "test_control_put_hysteresis_oob_returns_400",  # HCP-P4
+    "test_control_put_ramp_up_oob_returns_400",  # HCP-P5
+    "test_control_put_ramp_down_oob_returns_400",  # HCP-P6
+    "test_control_put_failsafe_policy_oob_returns_400",  # HCP-P7
+    "test_control_put_safe_duty_oob_returns_400",  # HCP-P8
+    "test_control_put_all_fields_success_returns_204",  # HCP-P9
+    "test_control_put_partial_hysteresis_only",  # HCP-P10
+    "test_control_put_partial_ramp_up_only",  # HCP-P11
+    "test_control_put_partial_ramp_down_only",  # HCP-P12
+    "test_control_put_partial_failsafe_policy_only",  # HCP-P13
+    "test_control_put_partial_safe_duty_only",  # HCP-P14
+    "test_control_put_no_fields_noop_returns_204",  # HCP-P15
 ]
 
 
@@ -129,7 +150,7 @@ if not _WSL_AVAILABLE:
 
 @unittest.skipUnless(_WSL_AVAILABLE, f"WSL distro {WSL_DISTRO} not available")
 class TestFCoapConfigHostC(unittest.TestCase):
-    """Runs the compiled f_coap C harness and asserts all 18 paths pass."""
+    """Runs the compiled f_coap C harness and asserts all 57 paths pass."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -150,7 +171,7 @@ class TestFCoapConfigHostC(unittest.TestCase):
         self.assertEqual(missing, [], msg="Missing test outputs:\n" + self._summary())
 
     def test_zero_failed_in_summary(self) -> None:
-        self.assertRegex(self.proc.stdout, r"RESULT: 39 passed, 0 failed",
+        self.assertRegex(self.proc.stdout, r"RESULT: 57 passed, 0 failed",
                          msg=self._summary())
 
 

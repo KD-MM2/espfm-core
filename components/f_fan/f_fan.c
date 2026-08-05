@@ -383,6 +383,24 @@ cleanup:
     return ret;
 }
 
+esp_err_t f_fan_set_alarm(f_fan_handle_t handle, uint8_t id, fan_alarm_t alarm)
+{
+    if (handle == NULL || id >= F_FAN_MAX_COUNT) return ESP_ERR_INVALID_ARG;
+
+    esp_err_t ret = ESP_OK;
+    xSemaphoreTakeRecursive(handle->mutex, portMAX_DELAY);
+
+    if (!handle->slot_used[id]) {
+        ret = ESP_ERR_NOT_FOUND;
+        goto cleanup;
+    }
+    handle->channels[id].alarm = alarm;
+
+cleanup:
+    xSemaphoreGiveRecursive(handle->mutex);
+    return ret;
+}
+
 /* Pre-validate a candidate pin for f_fan_set_gpio without mutating state.
    Returns ESP_ERR_INVALID_ARG for pins beyond the chip pin table or reserved by
    the chip, ESP_ERR_INVALID_STATE for a pin claimed by another peripheral, and
