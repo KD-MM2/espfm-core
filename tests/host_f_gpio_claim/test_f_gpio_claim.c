@@ -58,15 +58,15 @@ extern esp_err_t __real_f_gpio_claim(f_gpio_handle_t handle, uint8_t pin, uint32
  * Test-hook globals (controlled per test)
  * ================================================================ */
 
-static f_gpio_handle_t g_gpio;  /* real registry, fresh per reset_test_state */
-static f_fan_handle_t g_fan;    /* real fan registry, fresh per reset_test_state */
-static f_source_handle_t g_src; /* real source registry, fresh per reset_test_state */
+static f_gpio_handle_t g_gpio;      /* real registry, fresh per reset_test_state */
+static f_fan_handle_t g_fan;        /* real fan registry, fresh per reset_test_state */
+static f_source_handle_t g_src;     /* real source registry, fresh per reset_test_state */
 static f_ds18b20_handle_t g_ds_ref; /* pointer storage passed to f_source_init */
 
 static f_ledc_handle_t g_ledc; /* opaque fake LEDC handle (never dereferenced) */
 static f_pcnt_handle_t g_pcnt; /* opaque fake PCNT handle (never dereferenced) */
 
-static int g_fail_calloc_on;     /* 0 = never fail; N = fail the Nth calloc call */
+static int g_fail_calloc_on; /* 0 = never fail; N = fail the Nth calloc call */
 static int g_calloc_calls;
 static int g_net_allocs; /* live wrapped allocations (calloc - free) */
 
@@ -238,10 +238,10 @@ static void reset_test_state(void)
     g_fail_calloc_on     = 0;
     g_fail_gpio_claim_on = 0;
 
-    g_gpio   = NULL;
-    g_fan    = NULL;
-    g_src    = NULL;
-    g_ds_ref = NULL;
+    g_gpio               = NULL;
+    g_fan                = NULL;
+    g_src                = NULL;
+    g_ds_ref             = NULL;
     f_gpio_init(&g_gpio);
     g_ledc = (f_ledc_handle_t)0x1;
     g_pcnt = (f_pcnt_handle_t)0x1;
@@ -803,7 +803,7 @@ static void test_fan_set_gpio_pwm_claim_injected_failure_returns_error(void)
     CHECK(setup_fan_15_4(&id) == ESP_OK);
     reset_hw_counters();
     g_fail_gpio_claim_on = 1; /* first f_gpio_claim (new pwm 20) fails */
-    const char *err = NULL;
+    const char *err      = NULL;
     CHECK(f_fan_set_gpio(g_fan, 0, 20, 4, &err) == ESP_ERR_INVALID_STATE);
     CHECK(err != NULL);
     CHECK(f_gpio_is_available(g_gpio, 20) == true); /* not claimed */
@@ -824,7 +824,7 @@ static void test_fan_set_gpio_tach_claim_injected_failure_releases_new_pwm(void)
     CHECK(setup_fan_15_4(&id) == ESP_OK);
     reset_hw_counters();
     g_fail_gpio_claim_on = 2; /* 1st claim (new pwm 20) OK, 2nd claim (new tach 21) fails */
-    const char *err = NULL;
+    const char *err      = NULL;
     CHECK(f_fan_set_gpio(g_fan, 0, 20, 21, &err) == ESP_ERR_INVALID_STATE);
     CHECK(err != NULL);
     CHECK(f_gpio_is_available(g_gpio, 20) == true); /* new pwm released */
@@ -1125,7 +1125,7 @@ static void test_ds18b20_init_reserved_cleans_up_handle_unset(void)
     f_ds18b20_handle_t h = (f_ds18b20_handle_t)0x1;
     CHECK(f_ds18b20_init(&h, 1, g_gpio) == ESP_ERR_INVALID_ARG);
     CHECK(g_bus_del_calls == 1);
-    CHECK(g_net_allocs == 0); /* handle freed */
+    CHECK(g_net_allocs == 0);            /* handle freed */
     CHECK(h == (f_ds18b20_handle_t)0x1); /* not set */
     printf("  [PASS] %s\n", __func__);
     g_pass++;
@@ -1159,78 +1159,267 @@ static void test_ds18b20_init_foreign_claim_cleans_up_handle_unset(void)
 }
 
 /* ================================================================
+ * f_source_update_manual tests (SU-P1..P9)
+ * ================================================================ */
+
+/* SU-P1 — NULL-handle guard: INVALID_ARG, registry untouched. */
+static void test_source_update_manual_null_handle_returns_invalid_arg(void)
+{
+    reset_test_state();
+    CHECK(f_source_update_manual(NULL, 0, 25.0f) == ESP_ERR_INVALID_ARG);
+    CHECK(f_source_get_count(g_src) == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* SU-P2 — id out of range (>= F_SOURCE_MAX_COUNT): INVALID_ARG, slot untouched. */
+static void test_source_update_manual_id_out_of_range_returns_invalid_arg(void)
+{
+    reset_test_state();
+    uint8_t id;
+    CHECK(f_source_add(g_src, SOURCE_TYPE_MANUAL, F_SOURCE_GPIO_NONE, "man", &id, NULL) == ESP_OK);
+    CHECK(f_source_update_manual(g_src, F_SOURCE_MAX_COUNT, 25.0f) == ESP_ERR_INVALID_ARG);
+    f_source_info_t si;
+    memset(&si, 0, sizeof(si));
+    CHECK(f_source_get_info(g_src, 0, &si) == ESP_OK);
+    CHECK(si.temp_c == 0.0f);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* SU-P3 — temp below physical min (-40.0): INVALID_ARG, no write, slot unchanged. */
+static void test_source_update_manual_temp_below_min_rejected_before_write(void)
+{
+    reset_test_state();
+    uint8_t id;
+    CHECK(f_source_add(g_src, SOURCE_TYPE_MANUAL, F_SOURCE_GPIO_NONE, "man", &id, NULL) == ESP_OK);
+    CHECK(f_source_update_manual(g_src, id, -40.01f) == ESP_ERR_INVALID_ARG);
+    f_source_info_t si;
+    memset(&si, 0, sizeof(si));
+    CHECK(f_source_get_info(g_src, id, &si) == ESP_OK);
+    CHECK(si.temp_c == 0.0f);
+    CHECK(si.status == SOURCE_STATUS_VALID);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* SU-P4 — temp above physical max (125.0): INVALID_ARG, no write, slot untouched. */
+static void test_source_update_manual_temp_above_max_rejected_before_write(void)
+{
+    reset_test_state();
+    uint8_t id;
+    CHECK(f_source_add(g_src, SOURCE_TYPE_MANUAL, F_SOURCE_GPIO_NONE, "man", &id, NULL) == ESP_OK);
+    CHECK(f_source_update_manual(g_src, id, 125.01f) == ESP_ERR_INVALID_ARG);
+    f_source_info_t si;
+    memset(&si, 0, sizeof(si));
+    CHECK(f_source_get_info(g_src, id, &si) == ESP_OK);
+    CHECK(si.temp_c == 0.0f);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* SU-P5 — slot not used: NOT_FOUND, no write. */
+static void test_source_update_manual_unused_slot_returns_not_found(void)
+{
+    reset_test_state();
+    CHECK(f_source_update_manual(g_src, 0, 25.0f) == ESP_ERR_NOT_FOUND);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* SU-P6 — slot used but non-MANUAL type (DS18B20): INVALID_ARG, temp unchanged. */
+static void test_source_update_manual_non_manual_type_rejected(void)
+{
+    reset_test_state();
+    uint8_t id;
+    CHECK(f_source_add_ds18b20(g_src, 0x28ABCDULL, "ds", &id) == ESP_OK);
+    CHECK(f_source_update_manual(g_src, id, 25.0f) == ESP_ERR_INVALID_ARG);
+    f_source_info_t si;
+    memset(&si, 0, sizeof(si));
+    CHECK(f_source_get_info(g_src, id, &si) == ESP_OK);
+    CHECK(si.temp_c == 0.0f);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* SU-P7 — happy path: writes temp, marks VALID, stamps clock. */
+static void test_source_update_manual_happy_path_writes_and_marks_valid(void)
+{
+    reset_test_state();
+    uint8_t id;
+    CHECK(f_source_add(g_src, SOURCE_TYPE_MANUAL, F_SOURCE_GPIO_NONE, "man", &id, NULL) == ESP_OK);
+    g_now_us = 1000000;
+    CHECK(f_source_update_manual(g_src, id, 25.0f) == ESP_OK);
+    f_source_info_t si;
+    memset(&si, 0, sizeof(si));
+    CHECK(f_source_get_info(g_src, id, &si) == ESP_OK);
+    CHECK(si.temp_c == 25.0f);
+    CHECK(si.last_update_us == 1000000);
+    CHECK(si.status == SOURCE_STATUS_VALID);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* SU-P8 — boundary accepted at min (inclusive): OK, temp stored. */
+static void test_source_update_manual_accepts_min_boundary(void)
+{
+    reset_test_state();
+    uint8_t id;
+    CHECK(f_source_add(g_src, SOURCE_TYPE_MANUAL, F_SOURCE_GPIO_NONE, "man", &id, NULL) == ESP_OK);
+    CHECK(f_source_update_manual(g_src, id, -40.0f) == ESP_OK);
+    f_source_info_t si;
+    memset(&si, 0, sizeof(si));
+    CHECK(f_source_get_info(g_src, id, &si) == ESP_OK);
+    CHECK(si.temp_c == -40.0f);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* SU-P9 — boundary accepted at max (inclusive): OK, temp stored. */
+static void test_source_update_manual_accepts_max_boundary(void)
+{
+    reset_test_state();
+    uint8_t id;
+    CHECK(f_source_add(g_src, SOURCE_TYPE_MANUAL, F_SOURCE_GPIO_NONE, "man", &id, NULL) == ESP_OK);
+    CHECK(f_source_update_manual(g_src, id, 125.0f) == ESP_OK);
+    f_source_info_t si;
+    memset(&si, 0, sizeof(si));
+    CHECK(f_source_get_info(g_src, id, &si) == ESP_OK);
+    CHECK(si.temp_c == 125.0f);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* ================================================================
+ * f_constraints_temp_c tests (CT-1..3)
+ * ================================================================ */
+
+/* CT-1 — in-range (inclusive): OK; err_msg NOT written on success. */
+static void test_constraints_temp_c_in_range_returns_ok(void)
+{
+    reset_test_state();
+    const char *em = (const char *)0x1;
+    CHECK(f_constraints_temp_c(0.0f, &em) == ESP_OK);
+    CHECK(em == (const char *)0x1); /* sentinel untouched on success */
+    CHECK(f_constraints_temp_c(-40.0f, NULL) == ESP_OK);
+    CHECK(f_constraints_temp_c(125.0f, NULL) == ESP_OK);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* CT-2 — below min: INVALID_ARG + ERR_TEMP literal; NULL err_msg guard no crash. */
+static void test_constraints_temp_c_below_min_returns_invalid_arg(void)
+{
+    reset_test_state();
+    const char *em = NULL;
+    CHECK(f_constraints_temp_c(-40.01f, &em) == ESP_ERR_INVALID_ARG);
+    CHECK(em != NULL && strcmp(em, "temp_c must be -40.0 to 125.0") == 0);
+    CHECK(f_constraints_temp_c(-40.01f, NULL) == ESP_ERR_INVALID_ARG);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* CT-3 — above max: INVALID_ARG + ERR_TEMP literal; NULL err_msg guard no crash. */
+static void test_constraints_temp_c_above_max_returns_invalid_arg(void)
+{
+    reset_test_state();
+    const char *em = NULL;
+    CHECK(f_constraints_temp_c(125.01f, &em) == ESP_ERR_INVALID_ARG);
+    CHECK(em != NULL && strcmp(em, "temp_c must be -40.0 to 125.0") == 0);
+    CHECK(f_constraints_temp_c(125.01f, NULL) == ESP_ERR_INVALID_ARG);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* ================================================================
  * main
  * ================================================================ */
 
 int main(void)
 {
     /* f_fan_add */
-    test_fan_add_null_args_returns_invalid_arg();                          /* FA-P1 */
-    test_fan_add_pwm_out_of_constraints_returns_invalid_arg();             /* FA-P2 */
-    test_fan_add_tach_out_of_constraints_returns_invalid_arg();            /* FA-P3 */
-    test_fan_add_registry_full_returns_no_mem();                           /* FA-P4 */
-    test_fan_add_claim_pwm_reserved_returns_invalid_arg();                 /* FA-P5 */
-    test_fan_add_claim_pwm_out_of_range_returns_invalid_arg();             /* FA-P6 */
-    test_fan_add_claim_pwm_foreign_claim_returns_invalid_state();          /* FA-P7 */
-    test_fan_add_success_no_tach_claims_pwm_only();                        /* FA-P8 */
-    test_fan_add_success_with_tach_claims_both();                          /* FA-P9 */
-    test_fan_add_tach_reserved_releases_pwm_returns_invalid_arg();         /* FA-P10 */
-    test_fan_add_tach_out_of_range_releases_pwm();                         /* FA-P11 */
-    test_fan_add_tach_foreign_claim_releases_pwm();                        /* FA-P12 */
-    test_fan_add_pwm_equals_tach_rejected_and_pwm_released();              /* FA-P13 */
+    test_fan_add_null_args_returns_invalid_arg();                  /* FA-P1 */
+    test_fan_add_pwm_out_of_constraints_returns_invalid_arg();     /* FA-P2 */
+    test_fan_add_tach_out_of_constraints_returns_invalid_arg();    /* FA-P3 */
+    test_fan_add_registry_full_returns_no_mem();                   /* FA-P4 */
+    test_fan_add_claim_pwm_reserved_returns_invalid_arg();         /* FA-P5 */
+    test_fan_add_claim_pwm_out_of_range_returns_invalid_arg();     /* FA-P6 */
+    test_fan_add_claim_pwm_foreign_claim_returns_invalid_state();  /* FA-P7 */
+    test_fan_add_success_no_tach_claims_pwm_only();                /* FA-P8 */
+    test_fan_add_success_with_tach_claims_both();                  /* FA-P9 */
+    test_fan_add_tach_reserved_releases_pwm_returns_invalid_arg(); /* FA-P10 */
+    test_fan_add_tach_out_of_range_releases_pwm();                 /* FA-P11 */
+    test_fan_add_tach_foreign_claim_releases_pwm();                /* FA-P12 */
+    test_fan_add_pwm_equals_tach_rejected_and_pwm_released();      /* FA-P13 */
 
     /* f_fan_set_gpio */
-    test_fan_set_gpio_null_args_returns_invalid_arg();                     /* FS-P1 */
-    test_fan_set_gpio_new_pwm_out_of_constraints_returns_invalid_arg();    /* FS-P2 */
-    test_fan_set_gpio_new_tach_out_of_constraints_returns_invalid_arg();   /* FS-P3 */
-    test_fan_set_gpio_slot_not_used_returns_not_found();                   /* FS-P4 */
-    test_fan_set_gpio_pwm_equals_tach_returns_invalid_arg_fan_intact();    /* FS-P5 */
-    test_fan_set_gpio_new_pwm_out_of_range_fan_intact();                   /* FS-P6 */
-    test_fan_set_gpio_new_pwm_reserved_fan_intact();                       /* FS-P7 */
-    test_fan_set_gpio_new_pwm_foreign_fan_intact();                        /* FS-P8 */
-    test_fan_set_gpio_new_tach_out_of_range_fan_intact();                  /* FS-P9 */
-    test_fan_set_gpio_new_tach_reserved_fan_intact();                      /* FS-P10 */
-    test_fan_set_gpio_new_tach_foreign_fan_intact();                       /* FS-P11 */
-    test_fan_set_gpio_identity_succeeds_reclaims_same_pins();              /* FS-P12 */
-    test_fan_set_gpio_pwm_only_change_reclaims();                          /* FS-P13 */
-    test_fan_set_gpio_tach_only_change_reclaims();                         /* FS-P14 */
-    test_fan_set_gpio_full_swap_succeeds();                                /* FS-P15 */
-    test_fan_set_gpio_both_new_pins_succeeds();                            /* FS-P16 */
-    test_fan_set_gpio_tach_removed_releases_tach();                        /* FS-P17 */
-    test_fan_set_gpio_tach_added_claims_new_tach();                        /* FS-P18 */
-    test_fan_set_gpio_pwm_claim_injected_failure_returns_error();          /* FS-P19 */
-    test_fan_set_gpio_tach_claim_injected_failure_releases_new_pwm();      /* FS-P20 */
+    test_fan_set_gpio_null_args_returns_invalid_arg();                   /* FS-P1 */
+    test_fan_set_gpio_new_pwm_out_of_constraints_returns_invalid_arg();  /* FS-P2 */
+    test_fan_set_gpio_new_tach_out_of_constraints_returns_invalid_arg(); /* FS-P3 */
+    test_fan_set_gpio_slot_not_used_returns_not_found();                 /* FS-P4 */
+    test_fan_set_gpio_pwm_equals_tach_returns_invalid_arg_fan_intact();  /* FS-P5 */
+    test_fan_set_gpio_new_pwm_out_of_range_fan_intact();                 /* FS-P6 */
+    test_fan_set_gpio_new_pwm_reserved_fan_intact();                     /* FS-P7 */
+    test_fan_set_gpio_new_pwm_foreign_fan_intact();                      /* FS-P8 */
+    test_fan_set_gpio_new_tach_out_of_range_fan_intact();                /* FS-P9 */
+    test_fan_set_gpio_new_tach_reserved_fan_intact();                    /* FS-P10 */
+    test_fan_set_gpio_new_tach_foreign_fan_intact();                     /* FS-P11 */
+    test_fan_set_gpio_identity_succeeds_reclaims_same_pins();            /* FS-P12 */
+    test_fan_set_gpio_pwm_only_change_reclaims();                        /* FS-P13 */
+    test_fan_set_gpio_tach_only_change_reclaims();                       /* FS-P14 */
+    test_fan_set_gpio_full_swap_succeeds();                              /* FS-P15 */
+    test_fan_set_gpio_both_new_pins_succeeds();                          /* FS-P16 */
+    test_fan_set_gpio_tach_removed_releases_tach();                      /* FS-P17 */
+    test_fan_set_gpio_tach_added_claims_new_tach();                      /* FS-P18 */
+    test_fan_set_gpio_pwm_claim_injected_failure_returns_error();        /* FS-P19 */
+    test_fan_set_gpio_tach_claim_injected_failure_releases_new_pwm();    /* FS-P20 */
 
     /* f_fan_remove */
-    test_fan_remove_null_args_returns_invalid_arg();                       /* FR-P1 */
-    test_fan_remove_unused_slot_returns_not_found();                       /* FR-P2 */
-    test_fan_remove_no_tach_releases_pwm();                                /* FR-P3 */
-    test_fan_remove_with_tach_releases_both();                             /* FR-P4 */
+    test_fan_remove_null_args_returns_invalid_arg(); /* FR-P1 */
+    test_fan_remove_unused_slot_returns_not_found(); /* FR-P2 */
+    test_fan_remove_no_tach_releases_pwm();          /* FR-P3 */
+    test_fan_remove_with_tach_releases_both();       /* FR-P4 */
 
     /* f_source_add */
-    test_source_add_null_args_returns_invalid_arg();                       /* SA-P1 */
-    test_source_add_registry_full_returns_no_mem();                        /* SA-P2 */
-    test_source_add_ntc_claims_adc_succeeds();                             /* SA-P3 */
-    test_source_add_ntc_sentinel_gpio_skips_claim();                       /* SA-P4 */
-    test_source_add_manual_skips_claim();                                  /* SA-P5 */
-    test_source_add_ntc_reserved_returns_invalid_arg();                    /* SA-P6 */
-    test_source_add_ntc_out_of_range_returns_invalid_arg();                /* SA-P7 */
-    test_source_add_ntc_foreign_claim_returns_invalid_state();             /* SA-P8 */
+    test_source_add_null_args_returns_invalid_arg();           /* SA-P1 */
+    test_source_add_registry_full_returns_no_mem();            /* SA-P2 */
+    test_source_add_ntc_claims_adc_succeeds();                 /* SA-P3 */
+    test_source_add_ntc_sentinel_gpio_skips_claim();           /* SA-P4 */
+    test_source_add_manual_skips_claim();                      /* SA-P5 */
+    test_source_add_ntc_reserved_returns_invalid_arg();        /* SA-P6 */
+    test_source_add_ntc_out_of_range_returns_invalid_arg();    /* SA-P7 */
+    test_source_add_ntc_foreign_claim_returns_invalid_state(); /* SA-P8 */
 
     /* f_source_remove */
-    test_source_remove_null_args_returns_invalid_arg();                    /* SR-P1 */
-    test_source_remove_unused_slot_returns_not_found();                    /* SR-P2 */
-    test_source_remove_ntc_releases_adc();                                 /* SR-P3 */
-    test_source_remove_ntc_sentinel_no_release();                          /* SR-P4 */
-    test_source_remove_manual_no_release();                                /* SR-P5 */
+    test_source_remove_null_args_returns_invalid_arg(); /* SR-P1 */
+    test_source_remove_unused_slot_returns_not_found(); /* SR-P2 */
+    test_source_remove_ntc_releases_adc();              /* SR-P3 */
+    test_source_remove_ntc_sentinel_no_release();       /* SR-P4 */
+    test_source_remove_manual_no_release();             /* SR-P5 */
 
     /* f_ds18b20_init */
-    test_ds18b20_init_null_handle_returns_invalid_arg();                   /* DI-P1 */
-    test_ds18b20_init_calloc_failure_returns_no_mem_handle_unset();        /* DI-P2 */
-    test_ds18b20_init_success_claims_onwire();                             /* DI-P3 */
-    test_ds18b20_init_reserved_cleans_up_handle_unset();                   /* DI-P4 */
-    test_ds18b20_init_out_of_range_cleans_up_handle_unset();               /* DI-P5 */
-    test_ds18b20_init_foreign_claim_cleans_up_handle_unset();              /* DI-P6 */
+    test_ds18b20_init_null_handle_returns_invalid_arg();            /* DI-P1 */
+    test_ds18b20_init_calloc_failure_returns_no_mem_handle_unset(); /* DI-P2 */
+    test_ds18b20_init_success_claims_onwire();                      /* DI-P3 */
+    test_ds18b20_init_reserved_cleans_up_handle_unset();            /* DI-P4 */
+    test_ds18b20_init_out_of_range_cleans_up_handle_unset();        /* DI-P5 */
+    test_ds18b20_init_foreign_claim_cleans_up_handle_unset();       /* DI-P6 */
+
+    /* f_source_update_manual */
+    test_source_update_manual_null_handle_returns_invalid_arg();      /* SU-P1 */
+    test_source_update_manual_id_out_of_range_returns_invalid_arg();  /* SU-P2 */
+    test_source_update_manual_temp_below_min_rejected_before_write(); /* SU-P3 */
+    test_source_update_manual_temp_above_max_rejected_before_write(); /* SU-P4 */
+    test_source_update_manual_unused_slot_returns_not_found();        /* SU-P5 */
+    test_source_update_manual_non_manual_type_rejected();             /* SU-P6 */
+    test_source_update_manual_happy_path_writes_and_marks_valid();    /* SU-P7 */
+    test_source_update_manual_accepts_min_boundary();                 /* SU-P8 */
+    test_source_update_manual_accepts_max_boundary();                 /* SU-P9 */
+
+    /* f_constraints_temp_c */
+    test_constraints_temp_c_in_range_returns_ok();           /* CT-1 */
+    test_constraints_temp_c_below_min_returns_invalid_arg(); /* CT-2 */
+    test_constraints_temp_c_above_max_returns_invalid_arg(); /* CT-3 */
 
     printf("\nRESULT: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;

@@ -26,8 +26,9 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOST_DIR = os.path.join(REPO_ROOT, "tests", "host_f_gpio_claim")
 WSL_DISTRO = "Ubuntu-24.04"
 
-# All 56 EPA execution paths (gpio phases 2-5: f_fan_add / f_fan_set_gpio /
-# f_fan_remove / f_source_add / f_source_remove / f_ds18b20_init), by test
+# All 68 EPA execution paths (gpio phases 2-5: f_fan_add / f_fan_set_gpio /
+# f_fan_remove / f_source_add / f_source_remove / f_ds18b20_init +
+# constr phase-1: f_source_update_manual / f_constraints_temp_c), by test
 # function name.
 ALL_PATHS = [
     # f_fan_add (FA-P1..P13)
@@ -92,6 +93,20 @@ ALL_PATHS = [
     "test_ds18b20_init_reserved_cleans_up_handle_unset",  # DI-P4
     "test_ds18b20_init_out_of_range_cleans_up_handle_unset",  # DI-P5
     "test_ds18b20_init_foreign_claim_cleans_up_handle_unset",  # DI-P6
+    # f_source_update_manual (SU-P1..P9) — constr phase-1 temp validator
+    "test_source_update_manual_null_handle_returns_invalid_arg",  # SU-P1
+    "test_source_update_manual_id_out_of_range_returns_invalid_arg",  # SU-P2
+    "test_source_update_manual_temp_below_min_rejected_before_write",  # SU-P3
+    "test_source_update_manual_temp_above_max_rejected_before_write",  # SU-P4
+    "test_source_update_manual_unused_slot_returns_not_found",  # SU-P5
+    "test_source_update_manual_non_manual_type_rejected",  # SU-P6
+    "test_source_update_manual_happy_path_writes_and_marks_valid",  # SU-P7
+    "test_source_update_manual_accepts_min_boundary",  # SU-P8
+    "test_source_update_manual_accepts_max_boundary",  # SU-P9
+    # f_constraints_temp_c (CT-1..3) — real validator branches
+    "test_constraints_temp_c_in_range_returns_ok",  # CT-1
+    "test_constraints_temp_c_below_min_returns_invalid_arg",  # CT-2
+    "test_constraints_temp_c_above_max_returns_invalid_arg",  # CT-3
 ]
 
 
@@ -145,7 +160,7 @@ if not _WSL_AVAILABLE:
 
 @unittest.skipUnless(_WSL_AVAILABLE, f"WSL distro {WSL_DISTRO} not available")
 class TestFGPIOClaimHostC(unittest.TestCase):
-    """Runs the compiled f_gpio_claim C harness and asserts all 56 paths pass."""
+    """Runs the compiled f_gpio_claim C harness and asserts all 68 paths pass."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -166,7 +181,7 @@ class TestFGPIOClaimHostC(unittest.TestCase):
         self.assertEqual(missing, [], msg="Missing test outputs:\n" + self._summary())
 
     def test_zero_failed_in_summary(self) -> None:
-        self.assertRegex(self.proc.stdout, r"RESULT: 56 passed, 0 failed",
+        self.assertRegex(self.proc.stdout, r"RESULT: 68 passed, 0 failed",
                          msg=self._summary())
 
 

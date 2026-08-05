@@ -204,6 +204,7 @@ esp_err_t esp_littlefs_info(const char *partition_label, size_t *total_bytes, si
 static const char *ERR_DUTY        = "duty must be 0-100";
 static const char *ERR_MODE        = "mode must be 0 (manual) or 1 (auto)";
 static const char *ERR_GPIO        = "GPIO must be 0-48";
+static const char *ERR_TEMP        = "temp_c must be -40.0 to 125.0";
 static const char *ERR_SCHED_RANGE = "start_min/end_min must be 0-1439";
 static const char *ERR_CURVE_COUNT = "curve must have 2-16 points";
 static const char *ERR_CURVE_ORDER = "curve points must be sorted by temp_c ascending";
@@ -296,6 +297,15 @@ esp_err_t f_constraints_schedule_count(uint8_t current, const char **err_msg)
 {
     if (current >= F_SCHEDULE_MAX_COUNT) {
         if (err_msg) *err_msg = ERR_SCHED_FULL;
+        return ESP_ERR_INVALID_ARG;
+    }
+    return ESP_OK;
+}
+
+esp_err_t f_constraints_temp_c(float val, const char **err_msg)
+{
+    if (val < F_CONSTRAINT_TEMP_C_MIN || val > F_CONSTRAINT_TEMP_C_MAX) {
+        if (err_msg) *err_msg = ERR_TEMP;
         return ESP_ERR_INVALID_ARG;
     }
     return ESP_OK;
@@ -1849,6 +1859,218 @@ static void test_f_config_import_all_rejects_ntc_source_gpio(void)
     g_pass++;
 }
 
+/* VI-1 — MANUAL source temp below min rejected before any mutation */
+static void test_f_config_import_all_rejects_manual_source_temp_below_min(void)
+{
+    reset_test_state();
+    struct f_config h         = {"", true, 0};
+    const char *em            = (const char *)0x1;
+    ConfigFile cfg            = ConfigFile_init_default;
+    cfg.has_sources           = true;
+    cfg.sources.sources_count = 1;
+    SourceInfo *s0            = &cfg.sources.sources[0];
+    *s0                       = (SourceInfo)SourceInfo_init_default;
+    strncpy(s0->name, "man0", sizeof(s0->name) - 1);
+    s0->name[sizeof(s0->name) - 1] = '\0';
+    s0->type                       = SourceType_SOURCE_TYPE_MANUAL;
+    s0->gpio                       = 255;
+    s0->temp_c                     = -40.01f;
+
+    esp_err_t err =
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+    CHECK(err == ESP_ERR_INVALID_ARG);
+    CHECK(em != NULL && strcmp(em, "temp_c must be -40.0 to 125.0") == 0);
+    CHECK(mutation_clean());
+    CHECK(g_source_update_manual_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* VI-2 — MANUAL source temp above max rejected before any mutation */
+static void test_f_config_import_all_rejects_manual_source_temp_above_max(void)
+{
+    reset_test_state();
+    struct f_config h         = {"", true, 0};
+    const char *em            = (const char *)0x1;
+    ConfigFile cfg            = ConfigFile_init_default;
+    cfg.has_sources           = true;
+    cfg.sources.sources_count = 1;
+    SourceInfo *s0            = &cfg.sources.sources[0];
+    *s0                       = (SourceInfo)SourceInfo_init_default;
+    strncpy(s0->name, "man0", sizeof(s0->name) - 1);
+    s0->name[sizeof(s0->name) - 1] = '\0';
+    s0->type                       = SourceType_SOURCE_TYPE_MANUAL;
+    s0->gpio                       = 255;
+    s0->temp_c                     = 125.01f;
+
+    esp_err_t err =
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+    CHECK(err == ESP_ERR_INVALID_ARG);
+    CHECK(em != NULL && strcmp(em, "temp_c must be -40.0 to 125.0") == 0);
+    CHECK(mutation_clean());
+    CHECK(g_source_update_manual_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* VI-3 — MANUAL boundary min accepted: source added, temp applied, persisted */
+static void test_f_config_import_all_accepts_manual_source_temp_min_boundary(void)
+{
+    reset_test_state();
+    static char p[] = "/tmp/fconfig_import_manmin.pb";
+    remove(p);
+    g_config_path             = p;
+    struct f_config h         = {"", true, 0};
+    const char *em            = (const char *)0x1;
+    ConfigFile cfg            = ConfigFile_init_default;
+    cfg.has_sources           = true;
+    cfg.sources.sources_count = 1;
+    SourceInfo *s0            = &cfg.sources.sources[0];
+    *s0                       = (SourceInfo)SourceInfo_init_default;
+    strncpy(s0->name, "man0", sizeof(s0->name) - 1);
+    s0->name[sizeof(s0->name) - 1] = '\0';
+    s0->type                       = SourceType_SOURCE_TYPE_MANUAL;
+    s0->gpio                       = 255;
+    s0->temp_c                     = -40.0f;
+
+    esp_err_t err =
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+    CHECK(err == ESP_OK);
+    CHECK(em == NULL);
+    CHECK(g_source_add_calls == 1);
+    CHECK(g_source_update_manual_calls == 1);
+    CHECK(src_info[0].temp_c == -40.0f);
+    CHECK(g_fopen_calls == 1);
+    remove(p);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* VI-4 — MANUAL boundary max accepted: source added, temp applied, persisted */
+static void test_f_config_import_all_accepts_manual_source_temp_max_boundary(void)
+{
+    reset_test_state();
+    static char p[] = "/tmp/fconfig_import_manmax.pb";
+    remove(p);
+    g_config_path             = p;
+    struct f_config h         = {"", true, 0};
+    const char *em            = (const char *)0x1;
+    ConfigFile cfg            = ConfigFile_init_default;
+    cfg.has_sources           = true;
+    cfg.sources.sources_count = 1;
+    SourceInfo *s0            = &cfg.sources.sources[0];
+    *s0                       = (SourceInfo)SourceInfo_init_default;
+    strncpy(s0->name, "man0", sizeof(s0->name) - 1);
+    s0->name[sizeof(s0->name) - 1] = '\0';
+    s0->type                       = SourceType_SOURCE_TYPE_MANUAL;
+    s0->gpio                       = 255;
+    s0->temp_c                     = 125.0f;
+
+    esp_err_t err =
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+    CHECK(err == ESP_OK);
+    CHECK(em == NULL);
+    CHECK(g_source_add_calls == 1);
+    CHECK(g_source_update_manual_calls == 1);
+    CHECK(src_info[0].temp_c == 125.0f);
+    CHECK(g_fopen_calls == 1);
+    remove(p);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* VI-5 — NTC source temp NOT validated: out-of-range temp still passes import */
+static void test_f_config_import_all_ntc_source_out_of_range_temp_passes(void)
+{
+    reset_test_state();
+    static char p[] = "/tmp/fconfig_import_ntc_ot.pb";
+    remove(p);
+    g_config_path             = p;
+    struct f_config h         = {"", true, 0};
+    const char *em            = (const char *)0x1;
+    ConfigFile cfg            = ConfigFile_init_default;
+    cfg.has_sources           = true;
+    cfg.sources.sources_count = 1;
+    SourceInfo *s0            = &cfg.sources.sources[0];
+    *s0                       = (SourceInfo)SourceInfo_init_default;
+    strncpy(s0->name, "ntc0", sizeof(s0->name) - 1);
+    s0->name[sizeof(s0->name) - 1] = '\0';
+    s0->type                       = SourceType_SOURCE_TYPE_NTC;
+    s0->gpio                       = 34;
+    s0->temp_c                     = 999.0f;
+
+    esp_err_t err =
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+    CHECK(err == ESP_OK);
+    CHECK(em == NULL);
+    CHECK(g_source_add_calls == 1);
+    CHECK(g_source_add_ds18b20_calls == 0);
+    CHECK(g_source_update_manual_calls == 0);
+    CHECK(g_fopen_calls == 1);
+    remove(p);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* VI-6 — DS18B20 source temp NOT validated: out-of-range temp still passes import */
+static void test_f_config_import_all_ds18b20_source_out_of_range_temp_passes(void)
+{
+    reset_test_state();
+    static char p[] = "/tmp/fconfig_import_ds_ot.pb";
+    remove(p);
+    g_config_path             = p;
+    struct f_config h         = {"", true, 0};
+    const char *em            = (const char *)0x1;
+    ConfigFile cfg            = ConfigFile_init_default;
+    cfg.has_sources           = true;
+    cfg.sources.sources_count = 1;
+    SourceInfo *s0            = &cfg.sources.sources[0];
+    *s0                       = (SourceInfo)SourceInfo_init_default;
+    strncpy(s0->name, "ds0", sizeof(s0->name) - 1);
+    s0->name[sizeof(s0->name) - 1] = '\0';
+    s0->type                       = SourceType_SOURCE_TYPE_DS18B20;
+    s0->ds18b20_rom_code           = 0x28ABCDULL;
+    s0->temp_c                     = -999.0f;
+
+    esp_err_t err =
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+    CHECK(err == ESP_OK);
+    CHECK(em == NULL);
+    CHECK(g_source_add_ds18b20_calls == 1);
+    CHECK(g_source_update_manual_calls == 0);
+    CHECK(g_fopen_calls == 1);
+    remove(p);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
+/* VI-7 — unknown enum maps to MANUAL: out-of-range temp rejected before mutation */
+static void test_f_config_import_all_rejects_unknown_type_out_of_range_temp(void)
+{
+    reset_test_state();
+    struct f_config h         = {"", true, 0};
+    const char *em            = (const char *)0x1;
+    ConfigFile cfg            = ConfigFile_init_default;
+    cfg.has_sources           = true;
+    cfg.sources.sources_count = 1;
+    SourceInfo *s0            = &cfg.sources.sources[0];
+    *s0                       = (SourceInfo)SourceInfo_init_default;
+    strncpy(s0->name, "unk0", sizeof(s0->name) - 1);
+    s0->name[sizeof(s0->name) - 1] = '\0';
+    s0->type                       = (SourceType)5;
+    s0->gpio                       = 255;
+    s0->temp_c                     = 200.0f;
+
+    esp_err_t err =
+        f_config_import_all((f_config_handle_t)&h, H_FAN, H_SRC, H_CUR, H_SCH, &cfg, &em);
+    CHECK(err == ESP_ERR_INVALID_ARG);
+    CHECK(em != NULL && strcmp(em, "temp_c must be -40.0 to 125.0") == 0);
+    CHECK(mutation_clean());
+    CHECK(g_source_add_calls == 0);
+    printf("  [PASS] %s\n", __func__);
+    g_pass++;
+}
+
 /* V-P11a — curve too few points */
 static void test_f_config_import_all_rejects_curve_too_few_points(void)
 {
@@ -2691,6 +2913,13 @@ int main(void)
     test_f_config_import_all_rejects_fan_mode();
     test_f_config_import_all_rejects_fan_duty();
     test_f_config_import_all_rejects_ntc_source_gpio();
+    test_f_config_import_all_rejects_manual_source_temp_below_min();    /* VI-1 */
+    test_f_config_import_all_rejects_manual_source_temp_above_max();    /* VI-2 */
+    test_f_config_import_all_accepts_manual_source_temp_min_boundary(); /* VI-3 */
+    test_f_config_import_all_accepts_manual_source_temp_max_boundary(); /* VI-4 */
+    test_f_config_import_all_ntc_source_out_of_range_temp_passes();     /* VI-5 */
+    test_f_config_import_all_ds18b20_source_out_of_range_temp_passes(); /* VI-6 */
+    test_f_config_import_all_rejects_unknown_type_out_of_range_temp();  /* VI-7 */
     test_f_config_import_all_rejects_curve_too_few_points();
     test_f_config_import_all_rejects_curve_too_many_points();
     test_f_config_import_all_rejects_curve_unsorted();

@@ -386,11 +386,15 @@ static esp_err_t f_config_validate_import(const ConfigFile *cfg, const char **er
         if (f_constraints_duty((int)pb->duty, err_msg) != ESP_OK) return ESP_ERR_INVALID_ARG;
     }
 
-    /* Sources: only NTC sources carry a GPIO; MANUAL/DS18B20 use the 255 sentinel. */
+    /* Sources: only NTC sources carry a GPIO; MANUAL/DS18B20 use the 255 sentinel.
+     * MANUAL temp_c must be within the physical range so the f_source_update_manual
+     * call in apply cannot fail after the registries are cleared. */
     for (pb_size_t i = 0; i < cfg->sources.sources_count; i++) {
         const SourceInfo *pb = &cfg->sources.sources[i];
         source_type_t stype  = pb_to_source_type(pb->type);
         if (stype == SOURCE_TYPE_NTC && f_constraints_gpio((int)pb->gpio, err_msg) != ESP_OK)
+            return ESP_ERR_INVALID_ARG;
+        if (stype == SOURCE_TYPE_MANUAL && f_constraints_temp_c(pb->temp_c, err_msg) != ESP_OK)
             return ESP_ERR_INVALID_ARG;
     }
 

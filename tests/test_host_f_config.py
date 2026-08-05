@@ -25,7 +25,8 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOST_DIR = os.path.join(REPO_ROOT, "tests", "host_f_config")
 WSL_DISTRO = "Ubuntu-24.04"
 
-# All 72 EPA execution paths (spec-01 phase-1 + spec-02 phase-1 + phase-2), by test function name.
+# All 79 EPA execution paths (spec-01 phase-1 + spec-02 phase-1 + phase-2 +
+# constr phase-2 import temp validation), by test function name.
 ALL_PATHS = [
     "test_f_config_export_all_rejects_null_buf_out",  # P1
     "test_f_config_export_all_rejects_null_len_out",  # P2
@@ -100,6 +101,14 @@ ALL_PATHS = [
     "test_f_config_import_all_apply_schedule_add_fails",  # A-ERR-SCHED-ADD
     "test_f_config_import_all_persist_fopen_fails",  # P-ERR-1
     "test_f_config_import_all_persist_export_calloc_fails",  # P-ERR-2
+    # constr phase-2: f_config_validate_import MANUAL temp_c check (VI-1..7)
+    "test_f_config_import_all_rejects_manual_source_temp_below_min",  # VI-1 (V2)
+    "test_f_config_import_all_rejects_manual_source_temp_above_max",  # VI-2 (V3)
+    "test_f_config_import_all_accepts_manual_source_temp_min_boundary",  # VI-3 (V1b)
+    "test_f_config_import_all_accepts_manual_source_temp_max_boundary",  # VI-4 (V1c)
+    "test_f_config_import_all_ntc_source_out_of_range_temp_passes",  # VI-5 (V4)
+    "test_f_config_import_all_ds18b20_source_out_of_range_temp_passes",  # VI-6 (V5)
+    "test_f_config_import_all_rejects_unknown_type_out_of_range_temp",  # VI-7 (V7)
 ]
 
 
@@ -153,7 +162,7 @@ if not _WSL_AVAILABLE:
 
 @unittest.skipUnless(_WSL_AVAILABLE, f"WSL distro {WSL_DISTRO} not available")
 class TestFConfigHostC(unittest.TestCase):
-    """Runs the compiled f_config C harness and asserts all 72 paths pass."""
+    """Runs the compiled f_config C harness and asserts all 79 paths pass."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -174,7 +183,7 @@ class TestFConfigHostC(unittest.TestCase):
         self.assertEqual(missing, [], msg="Missing test outputs:\n" + self._summary())
 
     def test_zero_failed_in_summary(self) -> None:
-        self.assertRegex(self.proc.stdout, r"RESULT: 72 passed, 0 failed",
+        self.assertRegex(self.proc.stdout, r"RESULT: 79 passed, 0 failed",
                          msg=self._summary())
 
 

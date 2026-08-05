@@ -1,4 +1,5 @@
 #include "f_source.h"
+#include "f_constraints.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -303,6 +304,7 @@ cleanup:
 esp_err_t f_source_update_manual(f_source_handle_t handle, uint8_t id, float temp_c)
 {
     if (handle == NULL || id >= F_SOURCE_MAX_COUNT) return ESP_ERR_INVALID_ARG;
+    if (f_constraints_temp_c(temp_c, NULL) != ESP_OK) return ESP_ERR_INVALID_ARG;
 
     esp_err_t ret = ESP_OK;
     xSemaphoreTakeRecursive(handle->mutex, portMAX_DELAY);

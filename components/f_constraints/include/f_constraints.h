@@ -30,7 +30,6 @@ extern "C" {
 esp_err_t f_constraints_duty(int val, const char **err_msg);
 esp_err_t f_constraints_mode(int val, const char **err_msg);
 esp_err_t f_constraints_gpio(int val, const char **err_msg);
-esp_err_t f_constraints_name(const char *name, const char **err_msg);
 esp_err_t f_constraints_temp_c(float val, const char **err_msg);
 esp_err_t f_constraints_schedule_time(int start_min, int end_min, const char **err_msg);
 esp_err_t f_constraints_curve_points(const f_curve_point_t *points, uint8_t count,

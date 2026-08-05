@@ -2,13 +2,10 @@
 #include "f_fan.h"
 #include "f_source.h"
 #include "f_schedule.h"
-#include <string.h>
 
 static const char *ERR_DUTY        = "duty must be 0-100";
 static const char *ERR_MODE        = "mode must be 0 (manual) or 1 (auto)";
 static const char *ERR_GPIO        = "GPIO must be 0-48";
-static const char *ERR_NAME_LEN    = "name too long (max 15 chars)";
-static const char *ERR_NAME_EMPTY  = "name must not be empty";
 static const char *ERR_TEMP        = "temp_c must be -40.0 to 125.0";
 static const char *ERR_SCHED_RANGE = "start_min/end_min must be 0-1439";
 static const char *ERR_CURVE_COUNT = "curve must have 2-16 points";
@@ -40,19 +37,6 @@ esp_err_t f_constraints_gpio(int val, const char **err_msg)
 {
     if (val < F_CONSTRAINT_GPIO_MIN || val > F_CONSTRAINT_GPIO_MAX) {
         if (err_msg) *err_msg = ERR_GPIO;
-        return ESP_ERR_INVALID_ARG;
-    }
-    return ESP_OK;
-}
-
-esp_err_t f_constraints_name(const char *name, const char **err_msg)
-{
-    if (name == NULL || name[0] == '\0') {
-        if (err_msg) *err_msg = ERR_NAME_EMPTY;
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (strlen(name) >= F_CONSTRAINT_NAME_MAX_LEN) {
-        if (err_msg) *err_msg = ERR_NAME_LEN;
         return ESP_ERR_INVALID_ARG;
     }
     return ESP_OK;
