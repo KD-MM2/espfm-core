@@ -198,18 +198,19 @@ Get-ChildItem -Path components, main -Recurse -Include *.c, *.h |
 | `fans`                       | GET, POST         | List fans, create fan                |
 | `fans/{0..MAX_FAN-1}`        | GET, PUT, DELETE  | Get/update/delete fan by ID          |
 | `sources`                    | GET, POST         | List sources, create source          |
-| `sources/{0..MAX_SOURCE-1}`  | GET, POST, DELETE | Get/update/delete source by ID       |
+| `sources/{0..MAX_SOURCE-1}`  | GET, PUT, DELETE | Get/update/delete source by ID       |
 | `sources/temp`               | POST              | Manual temperature update            |
 | `curves`                     | GET, POST         | List curves, create curve            |
 | `curves/{0..MAX_CURVE-1}`    | GET, PUT, DELETE  | Get/update/delete curve by ID        |
 | `schedules`                  | GET, POST         | List schedules, create schedule      |
 | `schedules/{0..MAX_SCHED-1}` | GET, PUT, DELETE  | Get/update/delete schedule by ID     |
 | `config`           | GET, POST         | Export/import all config as `ConfigFile` protobuf |
+| `control`          | GET, PUT          | Get/update control-loop tunables (hysteresis, ramp up/down, failsafe policy, safe duty) |
 | `system/info`      | GET               | Version, uptime, heap, entity counts |
 | `system/hostname`  | PUT               | Set device hostname                  |
 | `system/reboot`    | POST              | Reboot device (2s delay)             |
 | `ds18b20/scan`     | GET               | Scan 1-Wire bus, list ROM codes+temps |
-| `ds18b20/config`   | PUT               | Set DS18B20 bus GPIO (runtime)       |
+| `ds18b20/config`   | POST              | Set DS18B20 bus GPIO (runtime)       |
 | `wifi/scan`        | GET               | Scan for APs                         |
 | `wifi/status`      | GET               | Current WiFi connection status       |
 | `wifi/connect`     | POST              | Connect to AP                        |

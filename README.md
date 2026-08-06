@@ -177,6 +177,15 @@ Start/end values are minutes since midnight (e.g., `--start 480 --end 1080` = 08
 | `system info` | Show version, uptime, heap, entity counts |
 | `system reboot` | Reboot device (2s delay) |
 
+### Control Tunables
+
+| Command | Description |
+|---------|-------------|
+| `control get` | Show control-loop tunables (hysteresis, ramp, failsafe, safe duty) |
+| `control set --hysteresis N --ramp-up N --ramp-down N --failsafe <policy> --safe-duty N` | Update control-loop tunables |
+
+`--failsafe` accepts `hold`, `full-speed`, `safe-duty`, `alt-source` (or the numeric value 0-3).
+
 ### DS18B20
 
 | Command | Description |
@@ -194,10 +203,11 @@ Start/end values are minutes since midnight (e.g., `--start 480 --end 1080` = 08
 
 ### Tips
 
-- Tab-completion works for commands, flags, and enum values (`auto`, `manual`, `ntc`, etc.)
+- Tab-completion works for commands, flags, and enum values (`auto`, `manual`, `ntc`, `hold`, `full-speed`, `safe-duty`, `alt-source`, etc.)
 - After `ds18b20 scan`, discovered ROM codes are added to tab-completion
 - `export`/`import` preserves fans, sources, curves, schedules, and WiFi status
 - Use `--no-delete` with `import` to avoid removing entities not in the JSON
+- `control set` applies a partial update — omit a flag to leave that tunable unchanged
 
 ### Usage example
 
@@ -309,6 +319,13 @@ All endpoints use CoAP over UDP port 5683. Request/response bodies are Protobuf-
 | PUT | `system/hostname` | Set device hostname |
 | POST | `system/reboot` | Reboot device (2s delayed restart) |
 
+### Control Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `control` | Get control-loop tunables (hysteresis, ramp up/down, failsafe policy, safe duty) |
+| PUT | `control` | Update control-loop tunables (partial update — omitted fields preserved) |
+
 ### WiFi Endpoints
 
 | Method | Path | Description |
@@ -328,13 +345,27 @@ All endpoints use CoAP over UDP port 5683. Request/response bodies are Protobuf-
 | Manual | `0` | Fixed duty cycle set by user |
 | AUTO | `1` | Duty determined by source temperature mapped through curve |
 
+### Control Loop Tunables
+
+In AUTO mode the duty is computed by the 1 Hz control loop. The tunables are readable/writable via `GET`/`PUT /control` (shell: `control get` / `control set`):
+
+| Tunable | Range | Description |
+|---------|-------|-------------|
+| `hysteresis` | 0-100% | Dead-band around the target duty to damp oscillation |
+| `ramp_up` | 0-100 | Max duty increase per second while approaching target |
+| `ramp_down` | 0-100 | Max duty decrease per second while approaching target |
+| `failsafe_policy` | 0-3 | Behavior on source/tach failure (see below) |
+| `safe_duty` | 0-100% | Duty applied when failsafe policy is `safe-duty` |
+
+Failsafe policies: `hold` (keep last duty), `full-speed` (100%), `safe-duty` (fixed `safe_duty`), `alt-source` (use alternate source).
+
 ### Source Types
 
 | Type | Value | Reads from |
 |------|-------|------------|
-| Manual | `0` | User sets temp via API |
-| NTC | `1` | ADC1 thermistor (Beta equation) |
-| DS18B20 | `2` | 1-Wire digital sensor |
+| NTC | `0` | ADC1 thermistor (Beta equation) |
+| DS18B20 | `1` | 1-Wire digital sensor |
+| Manual | `2` | User sets temp via API |
 
 ### Schedules
 

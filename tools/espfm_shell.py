@@ -100,6 +100,15 @@ FAN_ALARM_VALUES: dict[str, int] = {
     "none": 0, "stall": 1, "overtemp": 2, "0": 0, "1": 1, "2": 2,
 }
 
+# Failsafe policy labels (ControlConfig)
+FAILSAFE_LABELS: dict[int, str] = {
+    0: "hold", 1: "full-speed", 2: "safe-duty", 3: "alt-source",
+}
+FAILSAFE_VALUES: dict[str, int] = {
+    "hold": 0, "full-speed": 1, "safe-duty": 2, "alt-source": 3,
+    "0": 0, "1": 1, "2": 2, "3": 3,
+}
+
 # WiFi auth mode labels
 WIFI_AUTH_LABELS: dict[int, str] = {
     0: "OPEN", 1: "WEP", 2: "WPA_PSK", 3: "WPA2_PSK",
@@ -432,6 +441,25 @@ class ESPFMClient:
 
     def system_reboot(self) -> pb.StatusResponse:
         _, data = self._post("/system/reboot")
+        return self._decode(pb.StatusResponse, data)
+
+    # -- Control tunables -------------------------------------------------
+
+    def control_get(self) -> pb.ControlConfig:
+        _, data = self._get("/control")
+        return self._decode(pb.ControlConfig, data)
+
+    def control_set(self, **kwargs: Any) -> pb.StatusResponse:
+        req = pb.ControlConfig()
+        field_map = {
+            "hysteresis": "hysteresis", "ramp_up": "ramp_up",
+            "ramp_down": "ramp_down", "failsafe_policy": "failsafe_policy",
+            "safe_duty": "safe_duty",
+        }
+        for key, field in field_map.items():
+            if key in kwargs:
+                setattr(req, field, kwargs[key])
+        _, data = self._put("/control", req)
         return self._decode(pb.StatusResponse, data)
 
     # -- DS18B20 -----------------------------------------------------------
@@ -1062,6 +1090,63 @@ def _handle_system(shell: ESPFMShell, args: list[str]) -> None:
     else:
         console.print(f"[yellow]Unknown system action: {action}[/yellow]")
         console.print("[yellow]Usage: system <info|reboot>[/yellow]")
+
+
+def _handle_control(shell: ESPFMShell, args: list[str]) -> None:
+    """Control-loop tunables: control get | set."""
+    if not args:
+        console.print("[yellow]Usage: control <get|set> ...[/yellow]")
+        return
+    action = args[0]
+    if not _check_connected(shell):
+        return
+    client = shell.client
+
+    try:
+        if action == "get":
+            cc = client.control_get()
+            lines = [
+                "[bold]Control Tunables[/bold]",
+                f"  Hysteresis:      {cc.hysteresis}%",
+                f"  Ramp-up:         {cc.ramp_up}%",
+                f"  Ramp-down:       {cc.ramp_down}%",
+                f"  Failsafe policy: {FAILSAFE_LABELS.get(cc.failsafe_policy, str(cc.failsafe_policy))}",
+                f"  Safe duty:       {cc.safe_duty}%",
+            ]
+            console.print(Panel("\n".join(lines), title="Control"))
+
+        elif action == "set":
+            flags = _parse_flags(args[1:])
+            kwargs: dict[str, Any] = {}
+            if "hysteresis" in flags:
+                kwargs["hysteresis"] = int(flags["hysteresis"])
+            if "ramp-up" in flags:
+                kwargs["ramp_up"] = int(flags["ramp-up"])
+            if "ramp-down" in flags:
+                kwargs["ramp_down"] = int(flags["ramp-down"])
+            if "failsafe" in flags:
+                kwargs["failsafe_policy"] = _resolve_enum(flags["failsafe"], FAILSAFE_VALUES)
+            if "safe-duty" in flags:
+                kwargs["safe_duty"] = int(flags["safe-duty"])
+            if not kwargs:
+                console.print(
+                    "[yellow]Usage: control set [--hysteresis N] [--ramp-up N] [--ramp-down N] "
+                    "[--failsafe hold|full-speed|safe-duty|alt-source] [--safe-duty N][/yellow]"
+                )
+                return
+            result = client.control_set(**kwargs)
+            if result.ok:
+                console.print("[green]Control tunables updated.[/green]")
+            else:
+                console.print(f"[red]Failed: {result.error_msg}[/red]")
+
+        else:
+            console.print(f"[yellow]Unknown control action: {action}[/yellow]")
+
+    except CoapError as e:
+        console.print(f"[red]{_error_message(e)}[/red]")
+    except (ValueError, IndexError) as e:
+        console.print(f"[red]Invalid argument: {e}[/red]")
 
 
 def _handle_ds18b20(shell: ESPFMShell, args: list[str]) -> None:
@@ -1760,6 +1845,12 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
                 "system info    — Show version, uptime, heap, entity counts\n"
                 "  system reboot  — Reboot the device (2s delay)"
             ),
+            "control": (
+                "control get    — Show control-loop tunables\n"
+                "  control set [--hysteresis N] [--ramp-up N] [--ramp-down N]\n"
+                "            [--failsafe hold|full-speed|safe-duty|alt-source] [--safe-duty N]\n"
+                "            — Update control tunables"
+            ),
             "ds18b20": (
                 "ds18b20 scan            — Scan for DS18B20 devices on the 1-Wire bus\n"
                 "  ds18b20 config --gpio <pin>  — Configure DS18B20 bus GPIO at runtime"
@@ -1794,6 +1885,7 @@ def _handle_help(shell: ESPFMShell, args: list[str]) -> None:
   schedules  list | create | update | delete
   wifi       scan | status | connect
   system     info | reboot
+  control    get | set
   ds18b20    scan | config
   devices    scan | connect | update
 
@@ -1860,7 +1952,7 @@ class ESPFMShell:
         """Start the interactive REPL."""
         self._completer_words: list[str] = [
             "connect", "disconnect", "help", "exit", "quit",
-            "fans", "sources", "curves", "schedules", "wifi", "system", "devices", "ds18b20",
+            "fans", "sources", "curves", "schedules", "wifi", "system", "control", "devices", "ds18b20",
             "dashboard", "export", "import",
             "list", "get", "create", "update", "delete", "enable", "disable", "temp",
             "scan", "status", "info", "reboot", "config",
@@ -1869,8 +1961,9 @@ class ESPFMShell:
             "--group", "--inverted", "--enabled",
             "--points", "--fan", "--start", "--end",
             "--rom", "--ssid", "--pass", "--port", "--timeout", "--no-delete",
-            "--hostname",
+            "--hostname", "--hysteresis", "--ramp-up", "--ramp-down", "--failsafe", "--safe-duty",
             "auto", "manual", "ntc", "true", "false",
+            "hold", "full-speed", "safe-duty", "alt-source",
         ]
         completer = WordCompleter(self._completer_words, ignore_case=True)
         session: PromptSession[str] = PromptSession(
@@ -1926,6 +2019,8 @@ class ESPFMShell:
                     _handle_wifi(self, args)
                 elif cmd == "system":
                     _handle_system(self, args)
+                elif cmd == "control":
+                    _handle_control(self, args)
                 elif cmd == "ds18b20":
                     _handle_ds18b20(self, args)
                 elif cmd == "devices":
