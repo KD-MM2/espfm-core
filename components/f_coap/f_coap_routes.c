@@ -1263,11 +1263,16 @@ void f_coap_register_resources(coap_context_t *ctx, struct f_coap *h)
         snprintf(path, sizeof(path), "sources/%d", i);
         add_resource(ctx, h, path, handle_source_get, NULL, handle_source_put,
                      handle_source_delete);
-        snprintf(path, sizeof(path), "curves/%d", i);
-        add_resource(ctx, h, path, handle_curve_get, NULL, handle_curve_put, handle_curve_delete);
         snprintf(path, sizeof(path), "schedules/%d", i);
         add_resource(ctx, h, path, handle_schedule_get, NULL, handle_schedule_put,
                      handle_schedule_delete);
+    }
+
+    /* /curves/{id} — curves support F_CURVE_MAX_COUNT (16) slots, not 8 */
+    for (int i = 0; i < F_CURVE_MAX_COUNT; i++) {
+        char path[16];
+        snprintf(path, sizeof(path), "curves/%d", i);
+        add_resource(ctx, h, path, handle_curve_get, NULL, handle_curve_put, handle_curve_delete);
     }
 
     /* /system/info */
