@@ -100,3 +100,7 @@ CONTEXT.md
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 graft/
+
+# Local WiFi credentials for tools/espfm_device_test.py (WIFI_SSID/WIFI_PASSWORD).
+# Never commit the real credentials — the .env loader falls back to empty strings.
+.env

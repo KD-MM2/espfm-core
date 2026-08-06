@@ -23,6 +23,7 @@ def run_host_unit_tests():
     suite = loader.loadTestsFromNames(
         [
             "test_espfm_shell",
+            "test_espfm_device_test",
             "test_host_f_config",
             "test_host_f_coap",
             "test_host_f_gpio_claim",
